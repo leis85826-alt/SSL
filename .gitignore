@@ -1,0 +1,35 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+coverage/
+*.tsbuildinfo
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local/editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Temporary and local databases
+.tmp/
+tmp/
+*.sqlite
+*.sqlite3
