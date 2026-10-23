@@ -2,7 +2,42 @@
 const BASE_URL='https://api.lk888.ai/v1';
 const DEFAULT_MODEL='deepseek-v4-pro';
 const validModel=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$/.test(value);
-const validModelSession=value=>!!value&&value.provider===BASE_URL&&validModel(value.model);
+const SAVED_SECONDS=90*24*3600;
+function providerURL(value){
+ if(typeof value!=='string'||value.length>350)throw fail('请填写有效的 API 基础地址。');
+ let url;try{url=new URL(value.trim());}catch{throw fail('API 基础地址格式不正确。');}
+ const host=url.hostname;
+ if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.port||!(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(host))||/(^|\.)(localhost|local|internal|test|invalid|example|onion)$/.test(host))throw fail('请使用公网域名的 HTTPS 地址（不含账号、查询参数或自定义端口）。');
+ let path=url.pathname.replace(/\/+$/,'').replace(/\/(chat\/completions|models)$/,'');
+ if(!path)path='/v1';
+ if(!/^\/[A-Za-z0-9/_.~-]*$/.test(path))throw fail('API 地址路径不正确。');
+ return url.origin+path;
+}
+const validModelSession=value=>{try{return !!value&&providerURL(value.provider)===value.provider&&validModel(value.model);}catch{return false;}};
+function publicAddress(value){
+ if(typeof value!=='string')return false;
+ if(value.includes(':'))return /^[23][0-9a-f]{0,3}:/i.test(value)&&!/^2001:(?:db8|0|10|20)(?::|$)/i.test(value)&&!/^2002:/i.test(value);
+ const a=value.split('.').map(Number);
+ if(a.length!==4||a.some(n=>!Number.isInteger(n)||n<0||n>255))return false;
+ const [x,y,z]=a;
+ return !(x===0||x===10||x===127||x>=224||x===100&&y>=64&&y<=127||x===169&&y===254||x===172&&y>=16&&y<=31||x===192&&(y===168||y===0||y===88&&z===99)||x===198&&(y===18||y===19||y===51&&z===100)||x===203&&y===0&&z===113);
+}
+async function checkProvider(provider){
+ const base=providerURL(provider);
+ // Preserve the existing provider path without introducing a DNS service dependency.
+ if(base===BASE_URL)return base;
+ const host=new URL(base).hostname,abort=new AbortController(),timer=setTimeout(()=>abort.abort(),8000);
+ try{
+  const results=await Promise.all(['A','AAAA'].map(async type=>{
+   const response=await fetch('https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(host)+'&type='+type,{headers:{Accept:'application/dns-json'},redirect:'manual',signal:abort.signal});
+   if(!response.ok)throw Error('dns failed');
+   const data=await readJSON(response,32000);if(data.Status!==0)throw Error('dns failed');
+   return (data.Answer||[]).filter(a=>a.type===1||a.type===28).map(a=>a.data);
+  }));
+  const addresses=results.flat();if(!addresses.length||addresses.some(a=>!publicAddress(a)))throw Error('non-public address');
+  return base;
+ }catch{throw fail('无法确认服务商公网地址，请核对域名或稍后重试；未发送 API 密钥。',400);}finally{clearTimeout(timer);}
+}
 const COOKIE='__Host-roadscape-model';
 // Streaming envelopes and reasoning are larger than the final design JSON.
 const MAX_MODEL_STREAM_BYTES=16*1024*1024;
@@ -22,18 +57,18 @@ function safeTransportError(error,secret=''){let message=String(error?.message||
 async function availableModels(credentials){
  const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),10000);
  try{
-  const response=await fetch(BASE_URL+'/models',{headers:{Authorization:'Bearer '+credentials.apiKey},redirect:'manual',signal:abort.signal});
+  const response=await fetch((await checkProvider(credentials.provider))+'/models',{headers:{Authorization:'Bearer '+credentials.apiKey},redirect:'manual',signal:abort.signal});
   if(response.status>=300&&response.status<400){await response.body?.cancel();throw fail('模型清单接口发生跳转，已阻止转发密钥。',502);}
   if(!response.ok){await response.body?.cancel();throw fail('读取模型清单失败（HTTP '+response.status+'），可手动填写服务商提供的模型ID。',502);}
   const data=await readJSON(response,1000000);
   if(!Array.isArray(data.data))throw fail('服务商模型清单格式不正确，请手动填写模型ID。',502);
   const ids=[...new Set(data.data.map(row=>row?.id).filter(validModel))].sort().slice(0,1000);
-  return {models:ids.map(id=>({id})),provider:BASE_URL};
+  return {models:ids.map(id=>({id})),provider:credentials.provider};
  }catch(error){if(error.status)throw error;throw fail(error.name==='AbortError'?'读取模型清单超时，请手动填写模型ID。':'读取模型清单失败，请手动填写模型ID。',502);}finally{clearTimeout(timer);}
 }
 async function upstream(credentials,messages,progress=()=>{}){
  const start=Date.now(),stats={phase:'connecting',bytes:0,outputBytes:0,outputCharacters:0,reasoningCharacters:0,doneReceived:false,finishReason:null,lastDataMs:null},abort=new AbortController(),timer=setTimeout(()=>abort.abort(),180000);console.info('MODEL_REQUEST_START',JSON.stringify({model:credentials.model,test:messages.length===1}));try{
- const response=await fetch(BASE_URL+'/chat/completions',{method:'POST',redirect:'manual',headers:{'Content-Type':'application/json','Authorization':'Bearer '+credentials.apiKey},body:JSON.stringify({model:credentials.model,messages,stream:true,max_tokens:messages.length===1?1024:12000,...(messages.length>1?{response_format:{type:'json_object'}}:{})}),signal:abort.signal});
+ const response=await fetch((await checkProvider(credentials.provider))+'/chat/completions',{method:'POST',redirect:'manual',headers:{'Content-Type':'application/json','Authorization':'Bearer '+credentials.apiKey},body:JSON.stringify({model:credentials.model,messages,stream:true,max_tokens:messages.length===1?1024:12000,...(messages.length>1?{response_format:{type:'json_object'}}:{})}),signal:abort.signal});
  console.info('MODEL_UPSTREAM_HEADERS',JSON.stringify({status:response.status,elapsedMs:Date.now()-start}));stats.phase='reading';progress({stage:'服务商已响应，正在读取模型输出'});
  if(response.status>=300&&response.status<400){await response.body?.cancel();throw fail('服务商接口发生跳转，已阻止转发密钥，请核对地址。',502);}
  if(!response.ok){let detail='服务商返回网关错误页面。';try{if((response.headers.get('content-type')||'').includes('json')){const data=await readJSON(response,100000);detail=data.error?.message||data.message||(typeof data.error==='string'?data.error:'服务商未提供说明');}else await response.body?.cancel();}catch{}detail=safeTransportError({message:detail},credentials.apiKey);console.warn('MODEL_UPSTREAM_REJECTED',JSON.stringify({status:response.status,model:credentials.model,detail}));const labels={400:'服务商拒绝请求参数',401:'密钥无效或已过期',403:'当前令牌无模型权限或被服务商拒绝',404:'接口或模型不可用',429:'服务商限流或额度不足'};throw fail((labels[response.status]||'模型服务返回错误')+'（HTTP '+response.status+'） 服务商说明：'+detail,502);}
@@ -94,23 +129,26 @@ function designPrompt(project){
 export {validate,parseDesignOutput,designPrompt,finalOutputText};
 export default {async fetch(req,env,ctx){const url=new URL(req.url);if(!url.pathname.startsWith('/api/')){const asset=assets[url.pathname==='/'?'/index.html':url.pathname];if(!asset)return new Response('Not found',{status:404});return new Response(un64(asset.data),{headers:{'Content-Type':asset.type,'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; img-src 'self' blob: data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' blob: data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"}});}
  try{const user=req.headers.get('oai-authenticated-user-id');if(!user)throw fail('请先登录后使用模型服务。',401);const origin=req.headers.get('Origin');if(req.method!=='GET'&&origin!==url.origin)throw fail('请求来源无效。',403);if(!['GET','POST','DELETE'].includes(req.method))throw fail('不支持此请求方法。',405);
- if(url.pathname==='/api/model/config'&&req.method==='GET'){const s=await session(req,user,env),configured=validModelSession(s);return json({configured,baseURL:BASE_URL,endpoint:BASE_URL+'/chat/completions',model:configured?s.model:DEFAULT_MODEL,mode:'chat',expiresAt:configured?s.expires:null,ready:!!env.ROADSCAPE_SESSION_SECRET});}
+ if(url.pathname==='/api/model/config'&&req.method==='GET'){const s=await session(req,user,env),configured=validModelSession(s);return json({configured,baseURL:configured?s.provider:BASE_URL,endpoint:(configured?s.provider:BASE_URL)+'/chat/completions',model:configured?s.model:DEFAULT_MODEL,mode:'chat',expiresAt:configured?s.expires:null,ready:!!env.ROADSCAPE_SESSION_SECRET});}
  if(url.pathname==='/api/model/config'&&req.method==='DELETE')return json({configured:false},200,{'Set-Cookie':COOKIE+'=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0'});
  if(url.pathname==='/api/model/config'&&req.method==='POST'){
   const data=await readJSON(req,3000),previous=await session(req,user,env);
+  const provider=providerURL(data.baseURL===undefined?(validModelSession(previous)?previous.provider:BASE_URL):data.baseURL);
   const model=data.model===undefined?(validModelSession(previous)?previous.model:DEFAULT_MODEL):(typeof data.model==='string'?data.model.trim():data.model);
   if(!validModel(model))throw fail('请填写有效的聊天模型ID（不超过200字符，不含空格）。');
   if(data.apiKey!==undefined&&typeof data.apiKey!=='string')throw fail('API密钥格式不正确。');
   const provided=typeof data.apiKey==='string'?data.apiKey.trim():'';
-  const apiKey=provided||(validModelSession(previous)?previous.apiKey:'');
+  if(validModelSession(previous)&&provider!==previous.provider&&!provided)throw fail('已更换服务商地址，请填写该服务商的 API 密钥；不会转发原地址的密钥。');
+  const apiKey=provided||(validModelSession(previous)&&provider===previous.provider?previous.apiKey:'');
   if(typeof apiKey!=='string'||apiKey.length<12||apiKey.length>512||!/^[\x21-\x7e]+$/.test(apiKey))throw fail('请填写完整API密钥；已有有效会话时可以留空。');
-  const s={apiKey,model,provider:BASE_URL,expires:Date.now()+8*3600000};
-  return json({configured:true,baseURL:BASE_URL,model,mode:'chat',expiresAt:s.expires},200,{'Set-Cookie':COOKIE+'='+await seal(s,user,env)+'; Path=/; Secure; HttpOnly; SameSite=Strict'});
+  await checkProvider(provider);
+  const s={apiKey,model,provider,expires:Date.now()+SAVED_SECONDS*1000};
+  return json({configured:true,baseURL:provider,model,mode:'chat',expiresAt:s.expires},200,{'Set-Cookie':COOKIE+'='+await seal(s,user,env)+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age='+SAVED_SECONDS});
  }
  const credentials=await session(req,user,env);if(!validModelSession(credentials))throw fail('请先在模型设置中保存当前服务商的API密钥和模型ID。',401);
  if(url.pathname==='/api/model/models'&&req.method==='GET')return json(await availableModels(credentials));
  if(url.pathname==='/api/model/test'&&req.method==='POST'){return progressResponse(async progress=>{await upstream(credentials,[{role:'user',content:'仅回复 OK。'}],progress);return {ok:true,model:credentials.model};},ctx);}
- if(url.pathname==='/api/model/generate'&&req.method==='POST'){const data=await readJSON(req);if(!data.project?.scope||!['trees','side','median'].some(k=>data.project.scope[k]))throw fail('请先确定设计范围。');if(!data.project.geometryConfirmed)throw fail('请先确认道路结构与尺寸。');if(!Array.isArray(data.project.geometry)||!data.project.geometry.length||data.project.geometry.length>30||data.project.geometry.some(s=>!['walk','trees','bike','side','road','median'].includes(s.type)||!Number.isFinite(s.width)||s.width<=0||s.width>100))throw fail('道路结构或尺寸无效。');return progressResponse(async progress=>{const content=await upstream(credentials,[{role:'system',content:designPrompt(data.project)},{role:'user',content:JSON.stringify(data)}],progress);let design;try{const parsed=parseDesignOutput(content);design=validate(parsed.data,data.project.scope);console.info('MODEL_FORMAT_PARSED',JSON.stringify({format:parsed.format,characters:content.length}));}catch(error){error.rawOutput=finalOutputText(content,credentials.apiKey).slice(0,40000);console.warn('MODEL_FORMAT_REJECTED',JSON.stringify({code:error.formatCode||'schema-invalid',characters:content.length}));throw error;}console.info('MODEL_DESIGN_VALIDATED',JSON.stringify({model:credentials.model,parts:Object.keys(design.parts)}));return {design,model:credentials.model,provider:BASE_URL};},ctx);}
+ if(url.pathname==='/api/model/generate'&&req.method==='POST'){const data=await readJSON(req);if(!data.project?.scope||!['trees','side','median'].some(k=>data.project.scope[k]))throw fail('请先确定设计范围。');if(!data.project.geometryConfirmed)throw fail('请先确认道路结构与尺寸。');if(!Array.isArray(data.project.geometry)||!data.project.geometry.length||data.project.geometry.length>30||data.project.geometry.some(s=>!['walk','trees','bike','side','road','median'].includes(s.type)||!Number.isFinite(s.width)||s.width<=0||s.width>100))throw fail('道路结构或尺寸无效。');return progressResponse(async progress=>{const content=await upstream(credentials,[{role:'system',content:designPrompt(data.project)},{role:'user',content:JSON.stringify(data)}],progress);let design;try{const parsed=parseDesignOutput(content);design=validate(parsed.data,data.project.scope);console.info('MODEL_FORMAT_PARSED',JSON.stringify({format:parsed.format,characters:content.length}));}catch(error){error.rawOutput=finalOutputText(content,credentials.apiKey).slice(0,40000);console.warn('MODEL_FORMAT_REJECTED',JSON.stringify({code:error.formatCode||'schema-invalid',characters:content.length}));throw error;}console.info('MODEL_DESIGN_VALIDATED',JSON.stringify({model:credentials.model,parts:Object.keys(design.parts)}));return {design,model:credentials.model,provider:credentials.provider};},ctx);}
  throw fail('接口不存在。',404);
  }catch(error){return json({error:error.status?error.message:'模型服务暂时不可用，请稍后重试。'},error.status||500);}
 }};

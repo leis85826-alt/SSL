@@ -65,7 +65,7 @@ test('model endpoints require HTTPS and same-origin writes', async () => {
 test('browser and model cookies are opaque, secure and HttpOnly', async () => {
   const first = await worker.fetch(request('/api/model/config'), env);
   const header = first.headers.getSetCookie()[0];
-  assert.match(header, /Secure; HttpOnly; SameSite=Strict; Max-Age=28800/);
+  assert.match(header, /Secure; HttpOnly; SameSite=Strict; Max-Age=7776000/);
   assert.equal((await first.json()).configured, false);
   const saved = await worker.fetch(request('/api/model/config', {
     method: 'POST', body: { apiKey }, cookie: header.split(';')[0],
@@ -390,4 +390,104 @@ test('provider model-permission errors do not silently revert the saved model', 
     assert.match(response.at(-1).message, /403/);
     assert.equal((await (await worker.fetch(request('/api/model/config', { cookie }), env)).json()).model, 'mock-unavailable-chat');
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('saved configuration and browser identity survive a browser restart and the previous 8-hour deadline', async () => {
+  const configured = await configure(); const now = Date.now;
+  try {
+    Date.now = () => now() + 9 * 3600 * 1000;
+    const response = await worker.fetch(request('/api/model/config', { cookie: configured.browser + '; ' + configured.model }), env);
+    const data = await response.json(); assert.equal(data.configured, true);
+    assert.ok(data.expiresAt > Date.now() + 88 * 86400000);
+  } finally { Date.now = now; }
+  const expired = Date.now;
+  try {
+    Date.now = () => expired() + 91 * 86400000;
+    assert.equal((await (await worker.fetch(request('/api/model/config', { cookie: configured.browser + '; ' + configured.model }), env)).json()).configured, false);
+  } finally { Date.now = expired; }
+});
+
+test('custom provider paths, model listing, test and generation use the saved address and matching new key', async () => {
+  const originalFetch = globalThis.fetch, configured = await configure(), calls = [];
+  const custom = 'https://chat.provider.com/openai/v1', customKey = randomBytes(24).toString('hex');
+  globalThis.fetch = async (url, options) => {
+    if (String(url).startsWith('https://cloudflare-dns.com/')) {
+      assert.equal(options.headers.Authorization, undefined);
+      return Response.json({ Status: 0, Answer: [{ type: 1, data: '8.8.8.8' }] });
+    }
+    assert.ok(String(url).startsWith(custom + '/')); assert.equal(options.headers.Authorization, 'Bearer ' + customKey); calls.push(String(url));
+    if (String(url).endsWith('/models')) return Response.json({ data: [{ id: 'other-chat' }] });
+    const body = JSON.parse(options.body); assert.equal(body.model, 'other-chat');
+    const content = body.messages.length === 1 ? 'OK' : JSON.stringify({ title: 'Custom provider', spacing: 8, treeLayout: 'continuous', parts: { trees: { description: '合成植物方案', plants: [{ name: '国槐', role: '乔木', position: '行道树带', form: '间距8m' }], pattern: null } }, warnings: [] });
+    return Response.json({ choices: [{ message: { content }, finish_reason: 'stop' }] });
+  };
+  try {
+    let cookie = configured.browser + '; ' + configured.model;
+    const saved = await worker.fetch(request('/api/model/config', { method: 'POST', cookie, body: { baseURL: custom + '/chat/completions/', model: 'other-chat', apiKey: customKey } }), env);
+    assert.equal(saved.status, 200); assert.equal((await saved.json()).baseURL, custom);
+    const headers = saved.headers.getSetCookie(); assert.ok(headers.every(h => /Max-Age=7776000/.test(h)));
+    cookie = cookieFrom(saved, browserCookie) + '; ' + cookieFrom(saved, modelCookie);
+    const restored = await (await worker.fetch(request('/api/model/config', { cookie }), env)).json();
+    assert.equal(restored.baseURL, custom); assert.equal(restored.model, 'other-chat'); assert.ok(!JSON.stringify(restored).includes(customKey));
+    assert.equal((await worker.fetch(request('/api/model/models', { cookie }), env)).status, 200);
+    assert.equal((await events(await worker.fetch(request('/api/model/test', { method: 'POST', cookie, body: {} }), env))).at(-1).type, 'result');
+    const generated = await events(await worker.fetch(request('/api/model/generate', { method: 'POST', cookie, body: { project: { scope: { trees: true }, geometryConfirmed: true, geometry: [{ type: 'trees', width: 3 }] } } }), env));
+    assert.equal(generated.at(-1).type, 'result'); assert.equal(generated.at(-1).data.provider, custom);
+    assert.deepEqual(calls, [custom + '/models', custom + '/chat/completions', custom + '/chat/completions']);
+    const reused = await worker.fetch(request('/api/model/config', { method: 'POST', cookie, body: { baseURL: custom, model: 'another-chat' } }), env);
+    assert.equal(reused.status, 200);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('changing provider never reuses the previous key; invalid addresses leave saved settings intact', async () => {
+  const configured = await configure(), cookie = configured.browser + '; ' + configured.model;
+  const originalFetch = globalThis.fetch; let networkCalls = 0;
+  globalThis.fetch = async () => { networkCalls++; throw Error('must not fetch'); };
+  try {
+    for (const baseURL of ['https://other.provider.com/v1', 'http://unsafe.com/v1', 'https://127.0.0.1/v1', 'https://[::1]/v1', 'https://user:pass@provider.com/v1', 'https://provider.com/v1?key=bad', 'https://provider.com:444/v1', 'https://foo.internal/v1', 'https://localhost/v1', 'https://2130706433/v1']) {
+      const response = await worker.fetch(request('/api/model/config', { method: 'POST', cookie, body: { baseURL, model: 'other-chat' } }), env);
+      assert.equal(response.status, 400, baseURL); assert.equal(cookieFrom(response, modelCookie), undefined);
+    }
+    assert.equal(networkCalls, 0);
+    assert.equal((await (await worker.fetch(request('/api/model/config', { cookie }), env)).json()).baseURL, 'https://api.lk888.ai/v1');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('private DNS answers and provider redirects cannot receive or forward credentials', async () => {
+  const originalFetch = globalThis.fetch, configured = await configure(); const cookie = configured.browser + '; ' + configured.model;
+  try {
+    for (const data of ['10.1.2.3','127.0.0.1','169.254.169.254','172.20.0.1','192.168.0.2','100.64.0.1','::1','fd00::1','::ffff:127.0.0.1']) {
+      let providerCalled = false;
+      globalThis.fetch = async (url, options) => {
+        if (!String(url).startsWith('https://cloudflare-dns.com/')) { providerCalled = true; throw Error('unsafe'); }
+        assert.equal(options.headers.Authorization, undefined);
+        return Response.json({ Status: 0, Answer: [{ type: data.includes(':') ? 28 : 1, data }] });
+      };
+      const response = await worker.fetch(request('/api/model/config', { method: 'POST', cookie, body: { baseURL: 'https://custom.provider.com/v1', model: 'chat', apiKey } }), env);
+      assert.equal(response.status, 400); assert.equal(providerCalled, false);
+    }
+    globalThis.fetch = async () => new Response(null, { status: 307, headers: { Location: 'https://private.example' } });
+    const response = await events(await worker.fetch(request('/api/model/test', { method: 'POST', cookie, body: {} }), env));
+    assert.equal(response.at(-1).type, 'error'); assert.match(response.at(-1).message, /跳转/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('resaving an existing 8-hour identity preserves its ID and upgrades both cookies', async () => {
+  const browserId = crypto.randomUUID(), expires = Date.now() + 8 * 3600000;
+  const key = await crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', new TextEncoder().encode(env.ROADSCAPE_SESSION_SECRET)), { name: 'AES-GCM' }, false, ['encrypt']);
+  async function seal(value, aad) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(aad) }, key, new TextEncoder().encode(JSON.stringify(value)));
+    return Buffer.from(iv).toString('base64') + '.' + Buffer.from(encrypted).toString('base64');
+  }
+  const browser = browserCookie + '=' + await seal({ version: 1, id: browserId, expires }, 'roadscape-cloudflare-browser-v1:' + origin);
+  const model = modelCookie + '=' + await seal({ apiKey, provider: 'https://api.lk888.ai/v1', model: 'deepseek-v4-pro', expires }, 'cloudflare-browser:' + browserId);
+  const saved = await worker.fetch(request('/api/model/config', { method: 'POST', cookie: browser + '; ' + model, body: { model: 'deepseek-v4-pro' } }), env);
+  assert.equal(saved.status, 200); assert.equal(saved.headers.getSetCookie().length, 2);
+  const cookie = cookieFrom(saved, browserCookie) + '; ' + cookieFrom(saved, modelCookie);
+  const now = Date.now;
+  try {
+    Date.now = () => now() + 9 * 3600000;
+    assert.equal((await (await worker.fetch(request('/api/model/config', { cookie }), env)).json()).configured, true);
+  } finally { Date.now = now; }
 });

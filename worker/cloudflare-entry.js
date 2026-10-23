@@ -3,7 +3,7 @@
 import modelWorker from '../dist/cloudflare/model-worker.mjs';
 
 const BROWSER_COOKIE = '__Host-roadscape-browser';
-const SESSION_MS = 8 * 60 * 60 * 1000;
+const SESSION_MS = 90 * 24 * 60 * 60 * 1000;
 const browserEncoder = new TextEncoder();
 const browserDecoder = new TextDecoder();
 const browserJSON = (error, status) => new Response(JSON.stringify({ error }), {
@@ -11,7 +11,8 @@ const browserJSON = (error, status) => new Response(JSON.stringify({ error }), {
   headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
 });
 
-async function browserIdentity(request, env) {
+async function browserIdentity(request, env, renew = false) {
+  let existingId;
   const origin = new URL(request.url).origin;
   const key = await crypto.subtle.importKey(
     'raw',
@@ -29,10 +30,13 @@ async function browserIdentity(request, env) {
       const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData }, key, ciphertext);
       const data = JSON.parse(browserDecoder.decode(plain));
       if (data.version === 1 && /^[a-f0-9-]{36}$/.test(data.id) && data.expires > Date.now()
-          && data.expires <= Date.now() + SESSION_MS) return { id: data.id };
+          && data.expires <= Date.now() + SESSION_MS) {
+        if (!renew) return { id: data.id };
+        existingId = data.id;
+      }
     } catch { /* Invalid or expired browser cookies never supply an identity. */ }
   }
-  const data = { version: 1, id: crypto.randomUUID(), expires: Date.now() + SESSION_MS };
+  const data = { version: 1, id: existingId || crypto.randomUUID(), expires: Date.now() + SESSION_MS };
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv, additionalData }, key, browserEncoder.encode(JSON.stringify(data)),
@@ -41,7 +45,7 @@ async function browserIdentity(request, env) {
   return {
     id: data.id,
     cookie: BROWSER_COOKIE + '=' + encode(iv) + '.' + encode(ciphertext)
-      + '; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=28800',
+      + '; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=' + SESSION_MS / 1000,
   };
 }
 
@@ -65,7 +69,7 @@ export default {
       return browserJSON('请先在 Cloudflare 中配置至少32字符的 ROADSCAPE_SESSION_SECRET 加密密钥。', 503);
     }
     try {
-      const browser = await browserIdentity(request, env);
+      const browser = await browserIdentity(request, env, url.pathname === '/api/model/config' && request.method === 'POST');
       const headers = new Headers(request.headers);
       // A public client must never choose the identity passed to the original Worker.
       headers.set('oai-authenticated-user-id', 'cloudflare-browser:' + browser.id);
