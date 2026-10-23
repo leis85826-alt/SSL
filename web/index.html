@@ -10,7 +10,7 @@
   <header class="topbar">
     <a class="brand" href="#workbench" aria-label="道路绿化首页"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M14 25V12M14 18C4 18 3 7 14 3c11 4 10 15 0 15Z"/><path d="m9 10 5 5 5-5"/></svg><span>道路绿化<span class="brand-en">ROADSCAPE</span></span></a>
     <nav aria-label="主导航"><button data-view="projects">我的项目</button><button data-view="workbench" class="active">方案工作台</button><button data-view="cases">案例库 <span id="case-count">03</span></button><button data-view="norms">项目规范</button></nav>
-    <div class="header-actions"><span class="local-status"><i></i> 本机工作空间</span><button class="text-btn" data-ai-action="settings">模型设置</button><button class="btn small" id="save-btn">保存</button><button class="btn dark small" id="export-btn">导出方案 <span>↗</span></button></div>
+    <div class="header-actions"><span class="local-status"><i></i> 本机工作空间</span><button class="text-btn" data-ai-action="settings">模型设置</button><button class="text-btn" data-image-action="settings">图片模型设置</button><button class="btn small" id="save-btn">保存</button><button class="btn dark small" id="export-btn">导出方案 <span>↗</span></button></div>
   </header>
   <main id="main"></main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -20,6 +20,7 @@
   <script src="plant-workspace.js" defer></script>
   <script src="project-rules.js" defer></script>
   <script src="model-api.js" defer></script>
+  <script src="image-model.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 // Cloudflare adapter for public, bring-your-own-key model sessions.
 // This browser identity is not an account or project authorization system.
 import modelWorker from '../dist/cloudflare/model-worker.mjs';
+import { imageFetch } from './image-api.mjs';
 
 const BROWSER_COOKIE = '__Host-roadscape-browser';
 const SESSION_MS = 90 * 24 * 60 * 60 * 1000;
@@ -69,11 +70,11 @@ export default {
       return browserJSON('请先在 Cloudflare 中配置至少32字符的 ROADSCAPE_SESSION_SECRET 加密密钥。', 503);
     }
     try {
-      const browser = await browserIdentity(request, env, url.pathname === '/api/model/config' && request.method === 'POST');
+      const browser = await browserIdentity(request, env, ['/api/model/config', '/api/image/config'].includes(url.pathname) && request.method === 'POST');
       const headers = new Headers(request.headers);
       // A public client must never choose the identity passed to the original Worker.
       headers.set('oai-authenticated-user-id', 'cloudflare-browser:' + browser.id);
-      const response = await modelWorker.fetch(new Request(request, { headers }), env, ctx);
+      const response = await (url.pathname.startsWith('/api/image/') ? imageFetch : modelWorker.fetch)(new Request(request, { headers }), env, ctx);
       const result = new Response(response.body, response);
       if (browser.cookie) result.headers.append('Set-Cookie', browser.cookie);
       return result;
