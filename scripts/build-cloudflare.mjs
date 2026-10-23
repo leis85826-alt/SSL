@@ -1,3 +1,4 @@
+import './prepare-m05-web.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 

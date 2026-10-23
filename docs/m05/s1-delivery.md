@@ -1,3 +1,5 @@
+> 后续接入状态：见 [workbench-storage-delivery.md](workbench-storage-delivery.md)。下文是 S1 原始隔离开发记录，不能替代最新验收状态。
+
 # M05 S1 任务交付与准入记录
 
 依据：`source/` 中四份 V1.0 文档；这是按用户新授权开展的 S1 开发，不将 M05-03 文末历史“只做 S0”的示例指令当成本轮指令。

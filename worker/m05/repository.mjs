@@ -1,3 +1,4 @@
+import { checksumSnapshot } from '../../shared/m05/snapshot-codec.mjs';
 import { collections, validateSnapshot } from '../../shared/m05/entities.mjs';
 import { ContractError, validate, id, text } from '../../shared/m05/schema.mjs';
 const fault = (message, status, code) => { throw new ContractError(message, status, code); };
@@ -30,11 +31,7 @@ export class ProjectRepository {
   }
   async save({ project_id, base_revision_id, snapshot, change_summary }, actor, create = false) {
     validate(id, project_id); validate(text, actor); validate(text, change_summary); validateSnapshot(snapshot);
-    const stable = v => Array.isArray(v) ? v.map(stable) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, stable(v[k])])) : v;
-    const normalized = structuredClone(snapshot);
-    for (const [name, pk] of Object.entries(collections)) normalized[name].sort((a,b) => a[pk].localeCompare(b[pk]));
-    const bytes = new TextEncoder().encode(JSON.stringify(stable(normalized)));
-    const checksum = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2,'0')).join('');
+    const checksum = await checksumSnapshot(snapshot);
     let number = 1;
     if (!create) {
       validate(id, base_revision_id);

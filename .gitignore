@@ -33,3 +33,6 @@ Thumbs.db
 tmp/
 *.sqlite
 *.sqlite3
+
+# Generated copies of shared M05 browser contracts
+web/m05/contracts/

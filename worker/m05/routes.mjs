@@ -14,6 +14,13 @@ async function body(request) {
 export async function handleM05(request, env, resolveIdentity) {
   const request_id = crypto.randomUUID();
   try {
+    if (new URL(request.url).pathname === '/api/v1/status' && request.method === 'GET') {
+      if (new URL(request.url).protocol !== 'https:') throw new ContractError('需要 HTTPS', 400);
+      const configured = env.M05_ENABLED === 'true' && !!env.M05_DB && !!resolveIdentity;
+      const actor = configured ? await resolveIdentity(request) : null;
+      const authenticated = typeof actor === 'string' && !!actor.trim() && actor.length <= 500;
+      return response({ success: true, data: { configured, authenticated } }, 200, request_id);
+    }
     if (env.M05_ENABLED !== 'true' || !env.M05_DB || !resolveIdentity) throw new ContractError('M05 存储或登录服务尚未启用', 503, 'NOT_CONFIGURED');
     const url = new URL(request.url);
     if (url.protocol !== 'https:') throw new ContractError('需要 HTTPS', 400);

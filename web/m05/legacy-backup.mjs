@@ -15,7 +15,7 @@ export async function collectLegacyBackup() {
   const visit = value => {
     if (!value || typeof value !== 'object') return;
     for (const [key, v] of Object.entries(value)) {
-      if (key === 'fileId' && typeof v === 'string') referenced.add(v);
+      if (['fileId','coverId'].includes(key) && typeof v === 'string') referenced.add(v);
       if (key === 'files' && Array.isArray(v)) for (const f of v) if (typeof f?.id === 'string') referenced.add(f.id);
       visit(v);
     }
