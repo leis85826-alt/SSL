@@ -60,6 +60,12 @@ Wrangler读取 `wrangler.jsonc`，先运行自定义构建，然后上传 `worke
 
 回归测试使用约2.1MB合成推理流和236字节最终方案：旧代码复现拒绝，修复后通过；另验证超大流、超大正文及未结束事件被拒绝并取消读取。共15项Node测试通过，不代表已验证真实付费上游或线上部署。此修复不改变模型选择、计费策略、项目数据或绘图逻辑，也不保证模型推理本身提速。
 
+### 流结束和超时阶段修复
+
+用户提供的[服务商API文档摘要](providers/ai-player-deepseek-v4-pro.md)确认流式响应以`[DONE]`结束。旧实现收到结束标志后仍等待HTTP EOF；现收到该标志立即停止读取、取消reader并校验最终方案。仍允许读取finish_reason之后、DONE之前的usage或错误；length截断标志不会被DONE覆盖为成功。
+
+180秒上限保留，不猜测未经文档说明的快速/关闭推理参数。超时错误新增等待阶段和正文累计字数；日志增加流量、最后数据时间、推理字符计数及白名单token用量，不输出推理/方案原文或密钥。模拟覆盖保持连接未关闭、分块DONE、末尾usage、finish_reason之后的错误、截断输出和不同超时阶段。线上这次超时是否由等待EOF引起尚无证据；如果180秒内仍没有DONE或完整结果，仍需服务商耗时/调用记录定位，不能宣称服务响应已提速。
+
 ```bash
 node scripts/build-cloudflare.mjs
 node --test tests/cloudflare-model.test.mjs

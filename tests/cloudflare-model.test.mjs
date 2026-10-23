@@ -171,18 +171,23 @@ test('disconnect clears model credentials without touching project data', async 
 const sse = value => 'data: ' + JSON.stringify(value) + '\n\n';
 const deltaFrame = delta => sse({ choices: [{ delta }] });
 
-async function generateStream(frames) {
+async function generateStream(frames, { keepOpen = false, stallError } = {}) {
   const { browser, model } = await configure();
   const originalFetch = globalThis.fetch;
   const iterator = frames[Symbol.iterator]();
   let cancelled = false;
+  let watchdog;
   globalThis.fetch = async () => new Response(new ReadableStream({
     pull(controller) {
       const next = iterator.next();
-      if (next.done) controller.close();
+      if (next.done && keepOpen) {
+        // A provider may send [DONE] but keep its HTTP stream open.
+        // Bound a broken consumer without waiting for the real 180-second timer.
+        watchdog = setTimeout(() => controller.error(stallError || new Error('Mock upstream connection remained open')), 100);
+      } else if (next.done) controller.close();
       else controller.enqueue(new TextEncoder().encode(next.value));
     },
-    cancel() { cancelled = true; iterator.return?.(); },
+    cancel() { clearTimeout(watchdog); cancelled = true; iterator.return?.(); },
   }), { headers: { 'Content-Type': 'text/event-stream' } });
   try {
     const response = await worker.fetch(request('/api/model/generate', {
@@ -190,7 +195,7 @@ async function generateStream(frames) {
       body: { project: { scope: { trees: true }, geometryConfirmed: true, geometry: [{ type: 'trees', width: 2.5 }] } },
     }), env);
     return { output: await events(response), get cancelled() { return cancelled; } };
-  } finally { globalThis.fetch = originalFetch; }
+  } finally { clearTimeout(watchdog); globalThis.fetch = originalFetch; }
 }
 
 test('reasoning stream over 2MB still returns a small valid design without exposing reasoning', async () => {
@@ -240,4 +245,56 @@ test('unterminated stream events cannot grow without a bound', async () => {
   assert.equal(result.output.at(-1).type, 'error');
   assert.match(result.output.at(-1).message, /单条响应过大/);
   assert.equal(result.cancelled, true);
+});
+
+test('DONE completes generation even if the provider keeps the HTTP connection open', async () => {
+  const design = {
+    title: '终止标记方案', spacing: 8, treeLayout: 'continuous', warnings: [],
+    parts: { trees: { description: '测试说明', plants: [{ name: '国槐', role: '乔木', position: '树带', form: '单排' }], pattern: null } },
+  };
+  const result = await generateStream([
+    deltaFrame({ content: JSON.stringify(design) }),
+    sse({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+    sse({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 200, total_tokens: 300 } }),
+    'data: [DO', 'NE]\n\n',
+  ], { keepOpen: true });
+  assert.equal(result.output.at(-1).type, 'result');
+  assert.equal(result.output.at(-1).data.design.title, design.title);
+  assert.equal(result.cancelled, true);
+});
+
+test('finish reason alone does not skip a subsequent provider error before DONE', async () => {
+  const result = await generateStream([
+    deltaFrame({ content: '{"title":"incomplete"}' }),
+    sse({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+    sse({ error: { message: 'mock provider failed after finish reason' } }),
+    'data: [DONE]\n\n',
+  ]);
+  assert.equal(result.output.at(-1).type, 'error');
+  assert.match(result.output.at(-1).message, /mock provider failed after finish reason/);
+});
+
+test('DONE does not accept truncated model output', async () => {
+  const result = await generateStream([
+    deltaFrame({ content: '{"title":"incomplete"}' }),
+    sse({ choices: [{ delta: {}, finish_reason: 'length' }] }),
+    'data: [DONE]\n\n',
+  ]);
+  assert.equal(result.output.at(-1).type, 'error');
+  assert.match(result.output.at(-1).message, /长度上限/);
+});
+
+test('timeouts identify reasoning versus partial content without disclosing reasoning text', async () => {
+  for (const [delta, message] of [
+    [{ reasoning_content: 'PRIVATE_REASONING_TEST' }, /仍在推理，方案正文已收到0字/],
+    [{ content: '{"title":' }, /方案输出尚未结束，已收到9字/],
+  ]) {
+    const result = await generateStream([deltaFrame(delta)], {
+      keepOpen: true, stallError: new DOMException('Mock deadline expired', 'AbortError'),
+    });
+    assert.equal(result.output.at(-1).type, 'error');
+    assert.match(result.output.at(-1).message, message);
+    assert.ok(!JSON.stringify(result.output).includes('PRIVATE_REASONING_TEST'));
+    assert.ok(!JSON.stringify(result.output).includes(apiKey));
+  }
 });
