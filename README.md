@@ -1,3 +1,14 @@
+## M05 S1（独立开发分支，未上线）
+
+四份设计文档见 [docs/m05/source](docs/m05/source/)。本轮实现数据模型、六规则校验及完整工程项目/历史版本存储接口，保留原网页和本机项目，不自动迁移。云端入口默认关闭；需要专用 D1 和可信账号认证服务，不能用模型会话代替项目账号。
+
+开发与限制见 [S1 交付记录](docs/m05/s1-delivery.md)、[存储决策](docs/m05/storage-adr.md)、[OpenAPI](docs/m05/openapi.json)。Node 24 可运行隔离验证：
+
+```bash
+node --test tests/m05/*.test.mjs tests/cloudflare-model.test.mjs
+node scripts/build-cloudflare.mjs
+```
+
 # 道路绿化 · 方案工作台
 
 Cloudflare上的在线模型生成需要Worker服务端，不能仅上传静态`web/`。已提供独立部署配置，见[Cloudflare模型接入说明](docs/CLOUDFLARE-MODEL.md)。默认部署为新的模型预览应用，每位使用者填写自己的API密钥；原工作台和本机数据保留。

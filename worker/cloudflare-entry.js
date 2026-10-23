@@ -2,6 +2,8 @@
 // This browser identity is not an account or project authorization system.
 import modelWorker from '../dist/cloudflare/model-worker.mjs';
 import { imageFetch } from './image-api.mjs';
+import { handleM05 } from './m05/routes.mjs';
+import { accountResolver } from './m05/cloudflare-auth.mjs';
 
 const BROWSER_COOKIE = '__Host-roadscape-browser';
 const SESSION_MS = 90 * 24 * 60 * 60 * 1000;
@@ -53,6 +55,7 @@ async function browserIdentity(request, env, renew = false) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === '/api/v1' || url.pathname.startsWith('/api/v1/')) return handleM05(request, env, accountResolver(env));
     if (!url.pathname.startsWith('/api/')) {
       if (!env.ASSETS) return new Response('Static asset binding is not configured.', { status: 503 });
       const assetResponse = await env.ASSETS.fetch(request);
