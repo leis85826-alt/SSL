@@ -167,3 +167,77 @@ test('disconnect clears model credentials without touching project data', async 
   assert.match(response.headers.getSetCookie()[0], /Max-Age=0/);
   assert.equal((await response.json()).configured, false);
 });
+
+const sse = value => 'data: ' + JSON.stringify(value) + '\n\n';
+const deltaFrame = delta => sse({ choices: [{ delta }] });
+
+async function generateStream(frames) {
+  const { browser, model } = await configure();
+  const originalFetch = globalThis.fetch;
+  const iterator = frames[Symbol.iterator]();
+  let cancelled = false;
+  globalThis.fetch = async () => new Response(new ReadableStream({
+    pull(controller) {
+      const next = iterator.next();
+      if (next.done) controller.close();
+      else controller.enqueue(new TextEncoder().encode(next.value));
+    },
+    cancel() { cancelled = true; iterator.return?.(); },
+  }), { headers: { 'Content-Type': 'text/event-stream' } });
+  try {
+    const response = await worker.fetch(request('/api/model/generate', {
+      method: 'POST', cookie: browser + '; ' + model,
+      body: { project: { scope: { trees: true }, geometryConfirmed: true, geometry: [{ type: 'trees', width: 2.5 }] } },
+    }), env);
+    return { output: await events(response), get cancelled() { return cancelled; } };
+  } finally { globalThis.fetch = originalFetch; }
+}
+
+test('reasoning stream over 2MB still returns a small valid design without exposing reasoning', async () => {
+  const reasoning = 'SYNTHETIC_PRIVATE_REASONING'.repeat(64);
+  const frame = deltaFrame({ reasoning_content: reasoning });
+  const count = Math.ceil(2100000 / new TextEncoder().encode(frame).length);
+  const design = {
+    title: '长推理后的有效方案', spacing: 8, treeLayout: 'continuous', warnings: [],
+    parts: { trees: { description: '测试说明', plants: [{ name: '国槐', role: '乔木', position: '树带', form: '单排' }], pattern: null } },
+  };
+  function* frames() {
+    for (let i = 0; i < count; i++) yield frame;
+    // Deliberately split the final content across events.
+    const content = JSON.stringify(design), mid = Math.floor(content.length / 2);
+    yield deltaFrame({ content: content.slice(0, mid) });
+    yield deltaFrame({ content: content.slice(mid) });
+    yield sse({ choices: [{ delta: {}, finish_reason: 'stop' }] });
+    yield 'data: [DONE]\n\n';
+  }
+  const { output } = await generateStream(frames());
+  assert.equal(output.at(-1).type, 'result');
+  assert.equal(output.at(-1).data.design.title, design.title);
+  assert.ok(!JSON.stringify(output).includes('SYNTHETIC_PRIVATE_REASONING'));
+});
+
+test('excessive cumulative reasoning remains bounded and the upstream stream is cancelled', async () => {
+  const frame = deltaFrame({ reasoning_content: 'x'.repeat(32768) });
+  function* frames() { for (let i = 0; i < 600; i++) yield frame; }
+  const result = await generateStream(frames());
+  assert.equal(result.output.at(-1).type, 'error');
+  assert.match(result.output.at(-1).message, /数据流超过16MB/);
+  assert.equal(result.cancelled, true);
+});
+
+test('oversized design content is rejected independently from reasoning size', async () => {
+  const frame = deltaFrame({ content: 'x'.repeat(32768) });
+  function* frames() { for (let i = 0; i < 40; i++) yield frame; }
+  const result = await generateStream(frames());
+  assert.equal(result.output.at(-1).type, 'error');
+  assert.match(result.output.at(-1).message, /方案正文超过1MB/);
+  assert.equal(result.cancelled, true);
+});
+
+test('unterminated stream events cannot grow without a bound', async () => {
+  function* frames() { for (let i = 0; i < 40; i++) yield 'x'.repeat(32768); }
+  const result = await generateStream(frames());
+  assert.equal(result.output.at(-1).type, 'error');
+  assert.match(result.output.at(-1).message, /单条响应过大/);
+  assert.equal(result.cancelled, true);
+});
