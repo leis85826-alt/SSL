@@ -298,3 +298,96 @@ test('timeouts identify reasoning versus partial content without disclosing reas
     assert.ok(!JSON.stringify(result.output).includes(apiKey));
   }
 });
+
+test('switching model with a blank key reuses the encrypted credential and updates the actual provider request', async () => {
+  const previous = await configure();
+  const chosen = 'mock-provider/fast-chat:2026-10';
+  const saved = await worker.fetch(request('/api/model/config', {
+    method: 'POST', cookie: previous.browser + '; ' + previous.model,
+    body: { model: chosen, apiKey: '' },
+  }), env);
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).model, chosen);
+  const cookie = previous.browser + '; ' + cookieFrom(saved, modelCookie);
+  const loaded = await worker.fetch(request('/api/model/config', { cookie }), env);
+  assert.equal((await loaded.json()).model, chosen);
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const design = {
+    title: '切换模型后的方案', spacing: 8, treeLayout: 'continuous', warnings: [],
+    parts: { trees: { description: '测试说明', plants: [{ name: '国槐', role: '乔木', position: '树带', form: '单排' }], pattern: null } },
+  };
+  globalThis.fetch = async (url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body.model);
+    assert.equal(url, 'https://api.lk888.ai/v1/chat/completions');
+    assert.equal(options.headers.Authorization, 'Bearer ' + apiKey);
+    return new Response(JSON.stringify({ choices: [{ message: { content: body.messages.length === 1 ? 'OK' : JSON.stringify(design) }, finish_reason: 'stop' }] }), { headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const tested = await events(await worker.fetch(request('/api/model/test', { method: 'POST', cookie, body: {} }), env));
+    assert.equal(tested.at(-1).data.model, chosen);
+    const generated = await events(await worker.fetch(request('/api/model/generate', {
+      method: 'POST', cookie, body: { project: { scope: { trees: true }, geometryConfirmed: true, geometry: [{ type: 'trees', width: 2.5 }] } },
+    }), env));
+    assert.equal(generated.at(-1).type, 'result');
+    assert.equal(generated.at(-1).data.model, chosen);
+    assert.deepEqual(calls, [chosen, chosen]);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('invalid model identifiers and a missing initial key cannot create a session', async () => {
+  const { browser, model } = await configure();
+  for (const value of ['', 'bad model', '<script>', 'x'.repeat(201), {}, 'test\nmodel']) {
+    const response = await worker.fetch(request('/api/model/config', {
+      method: 'POST', cookie: browser + '; ' + model, body: { model: value },
+    }), env);
+    assert.equal(response.status, 400);
+    assert.equal(response.headers.getSetCookie().filter(c => c.startsWith(modelCookie + '=')).length, 0);
+  }
+  assert.equal((await worker.fetch(request('/api/model/config', { method: 'POST', body: { model: 'mock-fast-chat' } }), env)).status, 400);
+});
+
+test('available model IDs come from the fixed provider using the session key', async () => {
+  const { browser, model } = await configure();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://api.lk888.ai/v1/models');
+    assert.equal(options.headers.Authorization, 'Bearer ' + apiKey);
+    assert.equal(options.redirect, 'manual');
+    return new Response(JSON.stringify({ data: [{ id: 'mock-fast-chat' }, { id: 'deepseek-v4-pro' }, { id: 'mock-fast-chat' }, { id: '<img>' }, {}] }), { headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const response = await worker.fetch(request('/api/model/models', { cookie: browser + '; ' + model }), env);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual(result.models, [{ id: 'deepseek-v4-pro' }, { id: 'mock-fast-chat' }]);
+    assert.ok(!JSON.stringify(result).includes(apiKey));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('model listing requires credentials and blocks provider redirects', async () => {
+  assert.equal((await worker.fetch(request('/api/model/models'), env)).status, 401);
+  const { browser, model } = await configure();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 302, headers: { Location: 'https://other.example/models' } });
+  try {
+    const response = await worker.fetch(request('/api/model/models', { cookie: browser + '; ' + model }), env);
+    assert.equal(response.status, 502);
+    assert.match((await response.json()).error, /跳转/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('provider model-permission errors do not silently revert the saved model', async () => {
+  const { browser, model } = await configure();
+  const saved = await worker.fetch(request('/api/model/config', { method: 'POST', cookie: browser + '; ' + model, body: { model: 'mock-unavailable-chat' } }), env);
+  const cookie = browser + '; ' + cookieFrom(saved, modelCookie);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: 'mock model denied' } }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  try {
+    const response = await events(await worker.fetch(request('/api/model/test', { method: 'POST', cookie, body: {} }), env));
+    assert.equal(response.at(-1).type, 'error');
+    assert.match(response.at(-1).message, /403/);
+    assert.equal((await (await worker.fetch(request('/api/model/config', { cookie }), env)).json()).model, 'mock-unavailable-chat');
+  } finally { globalThis.fetch = originalFetch; }
+});
