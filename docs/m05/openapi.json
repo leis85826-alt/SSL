@@ -1,0 +1,1114 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Roadscape M05 S1 isolated storage API",
+    "version": "0.1.0",
+    "description": "Only implemented S1 routes. S2–S9, plant library search, previews/commits, exports and asset Blob APIs are not implemented. Disabled by default; trusted service-binding account authentication required. No anonymous model-cookie authorization."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "accountSession": []
+    }
+  ],
+  "paths": {
+    "/projects": {
+      "post": {
+        "summary": "Create project and initial complete snapshot",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "project_id",
+                  "snapshot",
+                  "change_summary"
+                ],
+                "properties": {
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "snapshot": {
+                    "$ref": "#/components/schemas/Snapshot"
+                  },
+                  "change_summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}": {
+      "get": {
+        "summary": "Read current or specified immutable revision",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revision_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/snapshots": {
+      "post": {
+        "summary": "Save complete manual snapshot with base revision optimistic locking (not S6 commit)",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "base_revision_id",
+                  "snapshot",
+                  "change_summary"
+                ],
+                "properties": {
+                  "base_revision_id": {
+                    "type": "string"
+                  },
+                  "snapshot": {
+                    "$ref": "#/components/schemas/Snapshot"
+                  },
+                  "change_summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "accountSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "deployment-account-session",
+        "description": "Actual cookie name defined by trusted M05_AUTH, not a cookie this API trusts directly."
+      }
+    },
+    "schemas": {
+      "Snapshot": {
+        "type": "object",
+        "required": [
+          "project",
+          "species",
+          "specifications",
+          "areas",
+          "alignments",
+          "rules",
+          "objects",
+          "groups",
+          "assets",
+          "templates"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "city": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "road_type": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "crs": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "source_unit": {
+                "enum": [
+                  "m",
+                  "mm",
+                  "cm",
+                  "ft"
+                ]
+              },
+              "unit_to_meter": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "name",
+              "city",
+              "road_type",
+              "crs",
+              "source_unit",
+              "unit_to_meter"
+            ],
+            "additionalProperties": false
+          },
+          "species": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "species_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "chinese_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "scientific_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "category": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "evergreen_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "usage_tags": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "suitable_regions": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "symbol_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                }
+              },
+              "required": [
+                "species_id",
+                "chinese_name",
+                "scientific_name",
+                "category",
+                "evergreen_type",
+                "usage_tags",
+                "suitable_regions",
+                "symbol_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "specifications": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "specification_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "species_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "trunk_diameter_cm": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "ground_diameter_cm": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "height_m": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "crown_diameter_m": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "branch_height_m": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "default_density": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "specification_id",
+                "species_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "areas": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "area_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "area_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "geometry": {
+                  "type": "object"
+                },
+                "excluded_geometry": {
+                  "type": "array",
+                  "maxItems": 1000,
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "usable_area_m2": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "source_layer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "locked": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "area_id",
+                "name",
+                "area_type",
+                "geometry",
+                "excluded_geometry",
+                "usable_area_m2",
+                "source_layer",
+                "locked"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "alignments": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "alignment_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "geometry": {
+                  "type": "object"
+                },
+                "direction": {
+                  "enum": [
+                    "FORWARD",
+                    "REVERSE"
+                  ]
+                },
+                "length_m": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "geometry_version": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "alignment_id",
+                "geometry",
+                "direction",
+                "length_m",
+                "geometry_version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rules": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "area_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "alignment_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "rule_type": {
+                  "enum": [
+                    "EQUAL_SPACING",
+                    "GROUP_PLANTING",
+                    "ALTERNATING",
+                    "HEDGE_ROWS",
+                    "GROUNDCOVER_AREA",
+                    "AREA_PARTITION"
+                  ]
+                },
+                "species_config": {
+                  "type": "object",
+                  "properties": {
+                    "species_id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                    },
+                    "specification_id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                    }
+                  },
+                  "required": [
+                    "species_id"
+                  ],
+                  "additionalProperties": false
+                },
+                "parameters": {
+                  "type": "object"
+                },
+                "constraints": {
+                  "type": "object",
+                  "properties": {
+                    "min_center_distance_m": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "boundary_offset_m": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "max_shift_m": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "step_m": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "max_iterations": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "source_references": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                      }
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "conflict_strategy": {
+                  "enum": [
+                    "REPORT",
+                    "SKIP",
+                    "REJECT",
+                    "AUTO_ADJUST"
+                  ]
+                },
+                "algorithm_version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "rule_id",
+                "area_id",
+                "rule_type",
+                "species_config",
+                "parameters",
+                "constraints",
+                "conflict_strategy",
+                "algorithm_version"
+              ],
+              "additionalProperties": false,
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "rule_type": {
+                        "const": "EQUAL_SPACING"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "start_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "lateral_offset_m": {
+                            "type": "number"
+                          },
+                          "spacing_m": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "mode": {
+                            "enum": [
+                              "FIXED_SPACING",
+                              "FIXED_COUNT"
+                            ]
+                          },
+                          "alignment": {
+                            "enum": [
+                              "START",
+                              "CENTER",
+                              "BOTH_ENDS"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "rule_type": {
+                        "const": "GROUP_PLANTING"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "start_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "lateral_offset_m": {
+                            "type": "number"
+                          },
+                          "group_size": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "intra_group_spacing_m": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "group_end_center_gap_m": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "tail_policy": {
+                            "enum": [
+                              "FULL_ONLY",
+                              "CENTER",
+                              "ALLOW_PARTIAL",
+                              "REQUIRE_GROUP_COUNT"
+                            ]
+                          },
+                          "group_count": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        },
+                        "required": [
+                          "group_size",
+                          "intra_group_spacing_m",
+                          "group_end_center_gap_m",
+                          "start_offset_m",
+                          "end_offset_m"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "rule_type": {
+                        "const": "ALTERNATING"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "start_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "lateral_offset_m": {
+                            "type": "number"
+                          },
+                          "spacing_m": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "pattern": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 100,
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                            }
+                          }
+                        },
+                        "required": [
+                          "spacing_m",
+                          "pattern"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "rule_type": {
+                        "const": "HEDGE_ROWS"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "start_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "lateral_offset_m": {
+                            "type": "number"
+                          },
+                          "spacing_m": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "row_count": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "row_spacing_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "side_offset_m": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "layout": {
+                            "enum": [
+                              "GRID",
+                              "STAGGERED"
+                            ]
+                          },
+                          "quantity_method": {
+                            "enum": [
+                              "INSTANCE_COUNT"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "spacing_m",
+                          "row_count",
+                          "row_spacing_m",
+                          "layout"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "rule_type": {
+                        "const": "GROUNDCOVER_AREA"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "density_per_m2": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "rounding": {
+                            "enum": [
+                              "CEIL_PER_AREA",
+                              "CEIL_AGGREGATE"
+                            ]
+                          },
+                          "quantity_method": {
+                            "enum": [
+                              "AREA_DENSITY"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "density_per_m2",
+                          "rounding",
+                          "quantity_method"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "rule_type": {
+                        "const": "AREA_PARTITION"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "widths_m": {
+                            "type": "array",
+                            "minItems": 3,
+                            "maxItems": 3,
+                            "items": {
+                              "type": "number",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "reference_alignment_id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                          }
+                        },
+                        "required": [
+                          "widths_m",
+                          "reference_alignment_id"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "objects": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "object_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "object_type": {
+                  "enum": [
+                    "INSTANCE",
+                    "LINE",
+                    "AREA"
+                  ]
+                },
+                "species_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "specification_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "area_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "rule_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "group_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "geometry": {
+                  "type": "object"
+                },
+                "station_m": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "quantity_method": {
+                  "enum": [
+                    "INSTANCE_COUNT",
+                    "AREA_DENSITY",
+                    "LINE_LENGTH"
+                  ]
+                },
+                "density_per_m2": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "estimated_quantity": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "lock_mode": {
+                  "enum": [
+                    "UNLOCKED",
+                    "POSITION_LOCKED",
+                    "FULLY_LOCKED"
+                  ]
+                },
+                "logical_key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "object_id",
+                "object_type",
+                "species_id",
+                "area_id",
+                "rule_id",
+                "geometry",
+                "quantity_method",
+                "lock_mode",
+                "logical_key"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "groups": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "group_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "rule_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "group_id",
+                "rule_id",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "assets": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "asset_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "storage_key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "media_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "asset_id",
+                "storage_key",
+                "sha256",
+                "media_type",
+                "size_bytes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "templates": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "template_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "rule_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$"
+                  }
+                },
+                "applicable_conditions": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "template_id",
+                "version",
+                "name",
+                "rule_ids",
+                "applicable_conditions"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
