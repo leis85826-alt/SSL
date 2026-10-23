@@ -1,8 +1,22 @@
 # 道路绿化 · 方案工作台
 
+Cloudflare上的在线模型生成需要Worker服务端，不能仅上传静态`web/`。已提供独立部署配置，见[Cloudflare模型接入说明](docs/CLOUDFLARE-MODEL.md)。默认部署为新的模型预览应用，每位使用者填写自己的API密钥；原工作台和本机数据保留。
+
 按已确认的网页概念图实现，采用暖白、灰绿、简约中文排版和响应式布局。
 
 ## 启动
+
+本地开发（不需要部署平台配置）：
+
+```bash
+node scripts/build-worker.mjs --local
+node scripts/validate-artifact.mjs --local
+node server.mjs --local
+```
+
+本地配置在 `.openai/local-build.json`，产物隔离在 `dist/local/`。此文件是项目自有的本地预览配置，不是部署平台的 `hosting.json`，不包含密钥。预览服务仅监听本机，并使用模拟登录身份；不能直接作为生产服务。
+
+以下原有命令面向平台构建，仍需由原部署平台提供有效的 `.openai/hosting.json`；该配置目前未入库。本地构建成功不代表生产部署已验证。
 
 先运行 `node scripts/build-worker.mjs`，再运行 `node server.mjs`，访问 http://127.0.0.1:4173 。当前界面源码在 `web/`，服务端在 `worker/index.js`，无第三方运行依赖。`dist/server/index.js` 为生成的Worker产物；旧的 `dist/` 静态文件仅为历史保留，不再作为编辑入口。
 

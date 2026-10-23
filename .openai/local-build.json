@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "target": "local-preview",
+  "worker_entry": "server/index.js"
+}

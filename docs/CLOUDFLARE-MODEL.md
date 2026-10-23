@@ -1,0 +1,67 @@
+# Cloudflare 在线模型生成部署
+
+当前静态资源上传只运行 `web/`，没有 `/api/model/*` 服务。此配置同时部署 Worker 模型代理和静态工作台。沿用已有服务商 `https://api.lk888.ai/v1`、模型 `deepseek-v4-pro`，不接入 M05 新算法或云端项目库。
+
+## 先明确密钥与身份
+
+- 每位使用者在网页“模型设置”填写自己的服务商 API 密钥；不是共用站长密钥。
+- Worker 用 `ROADSCAPE_SESSION_SECRET` 加密会话，浏览器通过 Secure/HttpOnly/SameSite=Strict Cookie 保存密文，最长8小时。这个 secret **不是模型 API 密钥**。
+- Cloudflare入口生成独立浏览器身份并覆盖客户端提供的原平台身份头；这是浏览器会话隔离，**不是账户登录或项目访问权限系统**。原 Sites 入口不变。
+- 模型配置/生成需HTTPS、同源写请求；原始项目/案例/规范文字会发送给既有模型服务商。附件原件不发送。
+- 不提交任何真实密钥，不写入普通 vars、源码、LocalStorage、项目或备份。浏览器本机项目仍不跨设备同步。
+
+## 使用命令行发布独立预览（推荐先验证）
+
+在自己的电脑解压源码包，打开包含 `wrangler.jsonc` 的根目录，安装现代 Node.js（本次验证为24）。以下命令使用已验证的 Wrangler 4.152.0。
+
+```bash
+npx wrangler@4.152.0 login
+```
+
+授权自己的 Cloudflare 账号后，先设置加密 secret：
+
+```bash
+npx wrangler@4.152.0 secret put ROADSCAPE_SESSION_SECRET
+```
+
+按命令提示在本机输入高强度随机字符串（建议32随机字节的64位十六进制表示，至少32字符）。可以使用系统密码生成器，或在本机运行 `openssl rand -hex 32`。**不要把生成值发到聊天或提交Git**。如果CLI提示该独立Worker尚不存在，按提示创建 `roadscape-model-preview`，然后设置secret。
+
+```bash
+npx wrangler@4.152.0 deploy
+```
+
+Wrangler读取 `wrangler.jsonc`，先运行自定义构建，然后上传 `worker/cloudflare-entry.js` 与 `web/` 资源。静态大图不嵌入Worker脚本。使用CLI实际输出的网址，不预先推测部署地址。
+
+默认名称 `roadscape-model-preview`，因此不会覆盖现有 `winter-poetry-86b3` 静态站点。新域名不会自动出现旧域名的本机数据；不要清空原浏览器或假设普通备份包含全部历史图片，参考M05审计报告。
+
+## 如果希望通过GitHub自动部署
+
+1. 使用 GitHub `leis85826-alt/SSL` 的 `feature/cloudflare-model` 开发分支；核对该分支包含本文、wrangler.jsonc 和 worker/cloudflare-entry.js。不要连接尚未包含模型接入代码的 main 分支。
+2. Cloudflare创建**Workers应用**，连接该分支。此版本需要执行Worker，不再用只上传静态文件的方式。
+3. 构建命令可留空（wrangler.jsonc 的 build.command 已定义构建），部署命令填 `npx wrangler@4.152.0 deploy`；根目录为仓库根目录。
+4. 在该Worker的 Settings → Variables and Secrets 添加类型为 Secret 的 `ROADSCAPE_SESSION_SECRET`，保存后重新部署。
+5. 不把服务商 API 密钥设置为公用站点变量；由使用者在网页中填写。
+
+如需升级现有网址，须明确决定覆盖原Worker后，将wrangler.jsonc中的name改为 `winter-poetry-86b3` 并在该Worker设置secret。先完成预览验收和代码审阅；本次未修改账号设置、推送或发布生产。
+
+## 上线后的验收
+
+1. 打开 `/api/model/config`：应返回JSON，包含 `configured:false`、`ready:true`；不应返回静态HTML、404或原Sites登录提示。
+2. 网页打开“模型设置”，输入自己的有效API密钥，保存会话，再点“测试已保存连接”。真实调用由服务商计费，不自动反复重试。
+3. 确认道路结构和尺寸，生成方式选择“DS-V4-Pro 方案＋矢量图”，点击生成。结果须出现API模型标记以及模型植物说明、平面和断面。
+4. 失败时检查页面提示与Cloudflare日志；不把模拟测试通过视为真实账户/额度/模型权限通过。不要公开密钥、请求中的项目资料或未经脱敏的日志。
+5. 同一浏览器保存并刷新验证；另一浏览器必须填写自己的密钥。清除模型会话后，现有规则生成仍可用。
+
+## 开发验证和回退
+
+```bash
+node scripts/build-cloudflare.mjs
+node --test tests/cloudflare-model.test.mjs
+npx wrangler@4.152.0 deploy --dry-run
+```
+
+本次：11项Node测试通过，Wrangler dry-run通过；本地HTTPS浏览器流程覆盖保存/测试密钥、模拟模型生成、绘图、错误保留原方案、断开与规则回退。未调用真实收费模型、未验证用户线上会话或生产secret、未部署。
+
+源码修改范围：新增Cloudflare入口、构建脚本、wrangler配置、测试和本文；web/model-api.js只调整会话说明文案。原 `worker/index.js`、项目模型、保存、图纸引擎和历史数据格式不变。原有未提交审计/本地构建文件保留。
+
+回退：预览验证前不替换原站。若后续升级同一Worker，先保留旧Cloudflare部署版本，通过平台回退到已验证版本；回退代码不清浏览器数据。secret轮换会使旧模型会话失效，需要重新填API密钥；不影响本机项目。

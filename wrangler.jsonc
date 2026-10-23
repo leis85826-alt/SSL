@@ -1,0 +1,14 @@
+{
+  "name": "roadscape-model-preview",
+  "main": "worker/cloudflare-entry.js",
+  "compatibility_date": "2026-10-23",
+  "workers_dev": true,
+  "build": {
+    "command": "node scripts/build-cloudflare.mjs"
+  },
+  "assets": {
+    "directory": "./web",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  }
+}
