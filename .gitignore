@@ -36,3 +36,6 @@ tmp/
 
 # Generated copies of shared M05 browser contracts
 web/m05/contracts/
+
+# Operator-generated deployment bindings (never credentials)
+wrangler.m05-cloud.jsonc

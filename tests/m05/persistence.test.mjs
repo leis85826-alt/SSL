@@ -1,8 +1,8 @@
 import { fixture } from './fixtures.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { LocalD1 } from './test-d1.mjs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ProjectRepository } from '../../worker/m05/repository.mjs';
@@ -10,16 +10,6 @@ import { handleM05 } from '../../worker/m05/routes.mjs';
 import { accountResolver } from '../../worker/m05/cloudflare-auth.mjs';
 import { validateSnapshot } from '../../shared/m05/entities.mjs';
 import { validateRule, RULE_SCHEMAS } from '../../shared/m05/rule-schemas.mjs';
-const migration = readFileSync(new URL('../../migrations/m05/0001_s1.sql', import.meta.url), 'utf8');
-class LocalD1 {
-  constructor(path = ':memory:') { this.raw = new DatabaseSync(path); this.raw.exec("PRAGMA foreign_keys = ON"); this.raw.exec(migration); this.failAt = -1; }
-  prepare(sql) { return { bind: (...args) => ({ sql, args, first: async () => this.raw.prepare(sql).get(...args) || null, all: async () => ({ results: this.raw.prepare(sql).all(...args) }) }) }; }
-  async batch(items) {
-    this.raw.exec('BEGIN IMMEDIATE');
-    try { for (let i = 0; i < items.length; i++) { if (i === this.failAt) throw new Error('injected disk error'); const x = items[i]; this.raw.prepare(x.sql).run(...x.args); } this.raw.exec('COMMIT'); }
-    catch (e) { this.raw.exec('ROLLBACK'); throw e; }
-  }
-}
 
 const create = (repo, snapshot = fixture(), project_id = 'project1') => repo.save({ project_id, snapshot, base_revision_id: null, change_summary: '初始化' }, 'owner', true);
 test('all core and supporting data survive disk close/reopen without AI; legacy sentinel preserved', async () => {

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Roadscape M05 S1 isolated storage API",
-    "version": "0.1.0",
-    "description": "Only implemented S1 routes. S2–S9, plant library search, previews/commits, exports and asset Blob APIs are not implemented. Disabled by default; trusted service-binding account authentication required. No anonymous model-cookie authorization."
+    "version": "0.2.0",
+    "description": "Implemented S1 project/history/file routes. S2–S9 algorithms, previews/commits and engineering exports remain unavailable. Disabled by default; verified Cloudflare Access JWT or trusted private account service required. Model cookies are not project identities."
   },
   "servers": [
     {
@@ -17,6 +17,44 @@
   ],
   "paths": {
     "/projects": {
+      "get": {
+        "summary": "List up to 100 accessible projects for the current account",
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      },
       "post": {
         "summary": "Create project and initial complete snapshot",
         "requestBody": {
@@ -221,6 +259,349 @@
           }
         }
       }
+    },
+    "/me": {
+      "get": {
+        "summary": "Read stable account ID and file-storage readiness",
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      }
+    },
+    "/login": {
+      "get": {
+        "summary": "After Access authentication, return to workbench; unconfigured login is unavailable",
+        "responses": {
+          "303": {
+            "description": "Return to /"
+          },
+          "401": {
+            "description": "Access login required"
+          },
+          "503": {
+            "description": "Cloud sync unconfigured"
+          }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "summary": "Configuration/authentication flags only; Access edge may still protect this path",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/revisions": {
+      "get": {
+        "summary": "Read immutable revision metadata",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/assets": {
+      "get": {
+        "summary": "List private file metadata for an authorized project",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/assets/{assetId}": {
+      "parameters": [
+        {
+          "name": "projectId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "assetId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Download authorized private attachment (forced download)",
+        "responses": {
+          "200": {
+            "description": "Private binary attachment",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      },
+      "put": {
+        "summary": "Upload immutable file; same ID with different content is 409",
+        "parameters": [
+          {
+            "name": "X-File-Name",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "encodeURIComponent filename"
+          },
+          {
+            "name": "X-File-Sha256",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          {
+            "name": "X-Asset-Purpose",
+            "in": "header",
+            "schema": {
+              "enum": [
+                "FILE",
+                "WORKBENCH_MANIFEST"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "25 MiB maximum; WORKBENCH_MANIFEST JSON maximum 2 MiB"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "success/data/project/revision/snapshot/request_id. Historical snapshots are immutable."
+          },
+          "201": {
+            "description": "Created independent saved revision; does not imply engineering validation."
+          },
+          "400": {
+            "description": "Malformed JSON / insecure transport"
+          },
+          "401": {
+            "description": "Account session required"
+          },
+          "403": {
+            "description": "Project permission / origin denied"
+          },
+          "404": {
+            "description": "Project/revision/route not found"
+          },
+          "409": {
+            "description": "Stale base revision or duplicate project. Read current version; no silent overwrite."
+          },
+          "413": {
+            "description": "Body exceeds 2 MiB"
+          },
+          "422": {
+            "description": "Contract or cross-reference validation error"
+          },
+          "500": {
+            "description": "Storage error; transaction rolled back"
+          },
+          "503": {
+            "description": "Storage/auth disabled or unconfigured"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -228,8 +609,8 @@
       "accountSession": {
         "type": "apiKey",
         "in": "cookie",
-        "name": "deployment-account-session",
-        "description": "Actual cookie name defined by trusted M05_AUTH, not a cookie this API trusts directly."
+        "name": "CF_Authorization",
+        "description": "Cloudflare Access session or configured private account service. Worker verifies JWT cryptographically; injected identity/email headers alone are never sufficient."
       }
     },
     "schemas": {

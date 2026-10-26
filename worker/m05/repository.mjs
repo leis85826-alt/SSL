@@ -15,6 +15,19 @@ export class ProjectRepository {
     }
     return project;
   }
+  async list(actor) {
+    validate(text, actor);
+    const rows = await this.statement(`SELECT p.project_id, p.owner_user_id, p.current_revision_id, p.created_at, p.updated_at, r.revision_number, r.project_json
+      FROM m05_projects p JOIN m05_revisions r ON r.project_id = p.project_id AND r.revision_id = p.current_revision_id
+      WHERE p.owner_user_id = ? OR EXISTS (SELECT 1 FROM m05_permissions g WHERE g.project_id = p.project_id AND g.user_id = ?)
+      ORDER BY p.updated_at DESC, p.project_id LIMIT 100`, actor, actor).all();
+    return rows.results.map(({project_json,...row}) => ({...row,...JSON.parse(project_json)}));
+  }
+  async history(projectId, actor) {
+    await this.access(projectId, actor);
+    const rows = await this.statement('SELECT revision_id, revision_number, parent_revision_id, created_at, change_summary, checksum FROM m05_revisions WHERE project_id = ? ORDER BY revision_number DESC', projectId).all();
+    return rows.results;
+  }
   async read(projectId, actor, revisionId) {
     const project = await this.access(projectId, actor);
     const revision = revisionId || project.current_revision_id; validate(id, revision);

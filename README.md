@@ -11,6 +11,8 @@ node scripts/build-cloudflare.mjs
 
 # 道路绿化 · 方案工作台
 
+云端续作已加入 Access 登录校验、D1/R2 私有文件接口及手动上传/下载入口，默认仍关闭；真实资源尚未配置，见 [云端配置步骤](docs/m05/cloud-setup.md) 与 [本轮交付](docs/m05/cloud-sync-delivery.md)。
+
 工作台已接入“项目数据与版本”：本机工程独立版本保存、恢复为新版本、工程包导入副本及工作台附件校验备份。云端同步仍未启用，原工作台方案和模型功能保留。操作、验证与限制见 [接入记录](docs/m05/workbench-storage-delivery.md)。
 
 Cloudflare上的在线模型生成需要Worker服务端，不能仅上传静态`web/`。已提供独立部署配置，见[Cloudflare模型接入说明](docs/CLOUDFLARE-MODEL.md)。默认部署为新的模型预览应用，每位使用者填写自己的API密钥；原工作台和本机数据保留。
