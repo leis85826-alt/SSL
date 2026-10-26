@@ -11,7 +11,7 @@ node scripts/build-cloudflare.mjs
 
 # 道路绿化 · 方案工作台
 
-种植平面现默认采用 A 风格精细矢量彩平，可切回原简图；已有方案可直接查看和导出 SVG，无需重新调用模型。数据保护与验证见 [彩平接入记录](docs/visuals/plan-style-a.md)。
+种植平面与道路断面默认采用统一的 A 风格精细矢量表现，可一起切回原简图；已有方案可直接查看和导出 SVG，无需重新调用模型。数据保护与验证见 [彩平接入记录](docs/visuals/plan-style-a.md) 和 [断面接入记录](docs/visuals/section-style-a.md)。
 
 云端续作已加入 Access 登录校验、D1/R2 私有文件接口及手动上传/下载入口，默认仍关闭；真实资源尚未配置，见 [云端配置步骤](docs/m05/cloud-setup.md) 与 [本轮交付](docs/m05/cloud-sync-delivery.md)。
 
