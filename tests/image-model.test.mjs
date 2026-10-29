@@ -140,3 +140,14 @@ test('creation distinguishes pre-dispatch rejection from uncertain network failu
   const pending=worker.fetch(request('/api/image/generate','POST',input,cookie),env);await ready;assert.equal(timers.at(-1).ms,90000);timers.at(-1).fn();const timed=await pending;assert.equal((await timed.json()).creation_state,'unknown');
  }finally{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimer;}
 });
+
+test('status bypasses caches and exposes fresh sanitized provider evidence without treating a URL as completion',async()=>{
+ const {cookie}=await configure(),originalFetch=globalThis.fetch;let result,lookups=0;
+ globalThis.fetch=async(url,options)=>{if(String(url).endsWith('/media/generate'))return Response.json({code:200,data:{task_id:123456}});lookups++;assert.equal(options.cache,'no-store');assert.equal(options.headers['Cache-Control'],'no-cache');assert.equal(options.headers.Pragma,'no-cache');return Response.json(result);};
+ try{
+  const task=await create(cookie);result={...success,state:'running',is_final:false,progress:'90%',status:'等待转存 '+apiKey,error:'备注 '+apiKey};
+  const pending=await (await worker.fetch(request('/api/image/status','POST',{ticket:task.ticket},cookie),env)).json();
+  assert.equal(pending.state,'running');assert.equal(pending.is_final,false);assert.equal(pending.has_result,true);assert.equal(pending.result_url,undefined);assert.equal(pending.result_type,'image');assert.ok(!JSON.stringify(pending).includes(apiKey));assert.match(pending.checked_at,/T.*Z$/);assert.ok(pending.response_ms>=0);assert.equal(pending.progress,'90%');
+  result={...success,status:'已完成'};const finished=await(await worker.fetch(request('/api/image/status','POST',{ticket:task.ticket},cookie),env)).json();assert.equal(finished.result_url,success.result_url);assert.equal(finished.is_final,true);assert.equal(lookups,2);
+ }finally{globalThis.fetch=originalFetch;}
+});

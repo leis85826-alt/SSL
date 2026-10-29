@@ -10,11 +10,12 @@ async function providerRequest(profile, path, payload, onDispatch = () => {}) {
   try {
     const base = await checkProvider(profile.provider);
     onDispatch();
-    const response = await fetch(base + path, { method: payload ? 'POST' : 'GET', redirect: 'manual', headers: { Authorization: 'Bearer ' + profile.apiKey, ...(payload ? { 'Content-Type': 'application/json' } : {}) }, ...(payload ? { body: JSON.stringify(payload) } : {}), signal: abort.signal });
+    const statusLookup = path.startsWith('/media/status?'), started = Date.now();
+    const response = await fetch(base + path, { method: payload ? 'POST' : 'GET', redirect: 'manual', ...(statusLookup ? { cache: 'no-store' } : {}), headers: { Authorization: 'Bearer ' + profile.apiKey, ...(statusLookup ? { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } : {}), ...(payload ? { 'Content-Type': 'application/json' } : {}) }, ...(payload ? { body: JSON.stringify(payload) } : {}), signal: abort.signal });
     if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); throw fail('图片接口发生跳转，未转发密钥，请核对地址。', 502); }
     const data = await readJSON(response, 100000);
     if (!response.ok) throw fail('图片服务返回 HTTP ' + response.status + '：' + safeTransportError(data.error || data.msg || data.message || '请检查服务商记录', profile.apiKey), 502);
-    return data;
+    return statusLookup ? { ...data, _query: { checked_at: new Date().toISOString(), response_ms: Date.now() - started } } : data;
   } catch (error) {
     if (error.status) throw error;
     throw fail('图片服务连接中断或超时。创建请求不会自动重试，请先查服务商记录，避免重复计费。', 502);
@@ -104,7 +105,7 @@ export async function imageFetch(req, env) {
       const result = await providerRequest(previous, '/media/status?task_id=' + encodeURIComponent(task.task_id));
       if (String(result.task_id) !== task.task_id) throw fail('服务商返回的任务编号不一致。', 502);
       if (!['pending','running','success','failed'].includes(result.state) || typeof result.is_final !== 'boolean') throw fail('服务商任务状态格式异常，未自动重建任务。', 502);
-      const common = { task_id: task.task_id, project_id: task.project_id, source_digest: task.source_digest, model: task.model, state: result.state, is_final: result.is_final, progress: typeof result.progress === 'string' && /^\d{1,3}%$/.test(result.progress) ? result.progress : '' };
+      const common = { task_id: task.task_id, project_id: task.project_id, source_digest: task.source_digest, model: task.model, state: result.state, is_final: result.is_final, progress: typeof result.progress === 'string' && /^\d{1,3}%$/.test(result.progress) ? result.progress : '', checked_at: result._query.checked_at, response_ms: result._query.response_ms, provider_status: typeof result.status === 'string' ? safeTransportError(result.status, previous.apiKey) : '', provider_note: typeof result.error === 'string' && result.error ? safeTransportError(result.error, previous.apiKey) : '', result_type: typeof result.result_type === 'string' ? safeTransportError(result.result_type, previous.apiKey) : '', has_result: typeof result.result_url === 'string' && !!result.result_url.trim() };
       if (!result.is_final) return json(common);
       if (result.state === 'failed') return json({ ...common, error: safeTransportError(result.error || '图片生成失败，请查看服务商退款记录。', previous.apiKey) });
       if (result.state !== 'success' || result.result_type !== 'image') throw fail('任务未返回成功的图片结果，请检查服务商记录。', 502);
