@@ -5,10 +5,11 @@ const fail = (message, status = 400) => Object.assign(new Error(message), { stat
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers } });
 const valid = value => value?.kind === 'image-profile' && value.model === MODEL && validModelSession(value);
 const digest = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2,'0')).join('');
-async function providerRequest(profile, path, payload) {
-  const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 20000);
+async function providerRequest(profile, path, payload, onDispatch = () => {}) {
+  const abort = new AbortController(), timer = setTimeout(() => abort.abort(), path === '/media/generate' ? 90000 : 20000);
   try {
     const base = await checkProvider(profile.provider);
+    onDispatch();
     const response = await fetch(base + path, { method: payload ? 'POST' : 'GET', redirect: 'manual', headers: { Authorization: 'Bearer ' + profile.apiKey, ...(payload ? { 'Content-Type': 'application/json' } : {}) }, ...(payload ? { body: JSON.stringify(payload) } : {}), signal: abort.signal });
     if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); throw fail('图片接口发生跳转，未转发密钥，请核对地址。', 502); }
     const data = await readJSON(response, 100000);
@@ -41,6 +42,9 @@ function imageURL(value) {
   return url.href;
 }
 export async function imageFetch(req, env) {
+  const creating = new URL(req.url).pathname === '/api/image/generate' && req.method === 'POST';
+  let creationState = 'not_created';
+  const requestId = crypto.randomUUID();
   try {
     const url = new URL(req.url), user = req.headers.get('oai-authenticated-user-id');
     if (!user) throw fail('请先建立浏览器会话。', 401);
@@ -75,12 +79,23 @@ export async function imageFetch(req, env) {
       const data = await readJSON(req, 64000);
       if (!data || typeof data.prompt !== 'string' || !data.prompt.trim() || data.prompt.length > 16000 || typeof data.project_id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(data.project_id) || !/^[a-f0-9]{64}$/.test(data.source_digest)) throw fail('请先保存有效绿化方案再生成效果图。');
       const params = validateParams(data.params);
-      const result = await providerRequest(previous, '/media/generate', { model: MODEL, prompt: data.prompt, params });
+      console.info('IMAGE_CREATE_START', JSON.stringify({ request_id: requestId, model: MODEL, imageSize: params.imageSize, thinkingLevel: params.thinkingLevel, web_search: params.web_search, promptCharacters: data.prompt.length }));
+      const result = await providerRequest(previous, '/media/generate', { model: MODEL, prompt: data.prompt, params }, () => { creationState = 'unknown'; });
       const taskId = result.data?.task_id;
       if (result.code !== 200 || !(typeof taskId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(taskId) || Number.isSafeInteger(taskId) && taskId > 0)) throw fail('未收到有效任务编号，请先查服务商记录，勿重复提交。' + safeTransportError(result.msg || '', previous.apiKey), 502);
       if (String(taskId).includes(previous.apiKey)) throw fail('服务商任务编号异常，请检查服务商记录。', 502);
       const ticket = { kind: 'image-task', task_id: String(taskId), project_id: data.project_id, source_digest: data.source_digest, provider: previous.provider, model: MODEL, key_hash: await digest(previous.apiKey), expires: Date.now() + 24 * 3600000 };
       return json({ task_id: ticket.task_id, ticket: await seal(ticket, user, env), model: MODEL, source_digest: ticket.source_digest, expiresAt: ticket.expires }, 201);
+    }
+    if (url.pathname === '/api/image/recover' && req.method === 'POST') {
+      const data = await readJSON(req, 5000);
+      if (typeof data?.task_id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(data.task_id) || typeof data.project_id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(data.project_id) || !/^[a-f0-9]{64}$/.test(data.source_digest)) throw fail('请填写服务商后台的原任务编号，不是API密钥。');
+      if (data.task_id.includes(previous.apiKey)) throw fail('请填写任务编号，不要填写API密钥。');
+      // Only read an existing task using the saved profile. Never call the paid creation endpoint.
+      const result = await providerRequest(previous, '/media/status?task_id=' + encodeURIComponent(data.task_id));
+      if (String(result.task_id) !== data.task_id || !['pending','running','success','failed'].includes(result.state) || typeof result.is_final !== 'boolean' || (result.is_final && result.state === 'success' && result.result_type !== 'image')) throw fail('未查到匹配的图片任务，请确认原服务商、密钥及任务编号。', 502);
+      const ticket = { kind: 'image-task', task_id: data.task_id, project_id: data.project_id, source_digest: data.source_digest, provider: previous.provider, model: MODEL, key_hash: await digest(previous.apiKey), expires: Date.now() + 24 * 3600000 };
+      return json({ task_id: ticket.task_id, ticket: await seal(ticket, user, env), model: MODEL, source_digest: ticket.source_digest, expiresAt: ticket.expires });
     }
     if (url.pathname === '/api/image/status' && req.method === 'POST') {
       const data = await readJSON(req, 5000), task = await taskTicket(data?.ticket, user, env);
@@ -97,5 +112,5 @@ export async function imageFetch(req, env) {
       return json({ ...common, result_url: imageURL(result.result_url), ...(Number.isFinite(result.cost) && result.cost >= 0 ? { cost: result.cost } : {}) });
     }
     throw fail('图片接口不存在。', 404);
-  } catch (error) { return json({ error: error.status ? error.message : '图片服务暂时不可用，未自动重试创建任务。' }, error.status || 500); }
+  } catch (error) { if (creating) console.warn('IMAGE_CREATE_FAILED', JSON.stringify({ request_id: requestId, status: error.status || 500, creation_state: creationState })); return json({ error: error.status ? error.message : '图片服务暂时不可用，未自动重试创建任务。', ...(creating ? { creation_state: creationState, request_id: requestId } : {}) }, error.status || 500); }
 }

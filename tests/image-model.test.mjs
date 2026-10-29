@@ -103,3 +103,40 @@ test('connection check reads model list only; provider errors and redirects do n
     }
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('recover verifies an existing provider task and issues a browser-bound ticket using GET only', async () => {
+  const { cookie } = await configure(), other = await configure(), originalFetch = globalThis.fetch, calls = [];
+  globalThis.fetch = async (url, options) => { calls.push({url:String(url),method:options.method}); return Response.json(success); };
+  try {
+    const response = await worker.fetch(request('/api/image/recover','POST',{task_id:'123456',project_id:input.project_id,source_digest:input.source_digest},cookie),env);
+    assert.equal(response.status,200);const recovered=await response.json();assert.equal(recovered.task_id,'123456');assert.ok(recovered.ticket);assert.ok(!JSON.stringify(recovered).includes(apiKey));
+    assert.deepEqual(calls,[{url:'https://api.lk888.ai/v1/media/status?task_id=123456',method:'GET'}]);
+    const restored=await (await worker.fetch(request('/api/image/status','POST',{ticket:recovered.ticket},cookie),env)).json();assert.equal(restored.result_url,success.result_url);assert.equal(restored.project_id,input.project_id);
+    assert.equal((await worker.fetch(request('/api/image/status','POST',{ticket:recovered.ticket},other.cookie),env)).status,401);
+    for(const task_id of ['','../secret','123?key=bad',apiKey])assert.equal((await worker.fetch(request('/api/image/recover','POST',{task_id,project_id:input.project_id,source_digest:input.source_digest},cookie),env)).status,400);
+    assert.ok(calls.every(x=>x.method==='GET'&&!x.url.includes('/media/generate')));
+  }finally{globalThis.fetch=originalFetch;}
+});
+
+test('recovery rejects mismatched, malformed, non-image and denied tasks without creating or replacing one',async()=>{
+ const {cookie}=await configure(),originalFetch=globalThis.fetch;let calls=0,result;
+ globalThis.fetch=async()=>{calls++;return Response.json(result);};
+ const body={task_id:'123456',project_id:input.project_id,source_digest:input.source_digest};
+ try{
+  for(const bad of [{...success,task_id:987},{...success,is_final:'true'},{...success,state:'已完成'},{...success,result_type:'video'}]){result=bad;assert.equal((await worker.fetch(request('/api/image/recover','POST',body,cookie),env)).status,502);}
+  assert.equal(calls,4);globalThis.fetch=async()=>Response.json({error:'Denied '+apiKey},{status:401});
+  const denied=await worker.fetch(request('/api/image/recover','POST',body,cookie),env);assert.equal(denied.status,502);assert.ok(!(await denied.text()).includes(apiKey));
+ }finally{globalThis.fetch=originalFetch;}
+});
+
+test('creation distinguishes pre-dispatch rejection from uncertain network failure and allows longer creation wait',async()=>{
+ const {cookie}=await configure(),originalFetch=globalThis.fetch,originalTimer=globalThis.setTimeout;let calls=0;
+ globalThis.fetch=async()=>{calls++;throw TypeError('network gone '+apiKey);};
+ try{
+  const invalid=await worker.fetch(request('/api/image/generate','POST',{...input,params:{...input.params,imageSize:'8K'}},cookie),env);assert.equal((await invalid.json()).creation_state,'not_created');assert.equal(calls,0);
+  const lost=await worker.fetch(request('/api/image/generate','POST',input,cookie),env);const body=await lost.json();assert.equal(body.creation_state,'unknown');assert.ok(body.request_id);assert.ok(!JSON.stringify(body).includes(apiKey));assert.equal(calls,1);
+  const timers=[];let armed;const ready=new Promise(resolve=>{armed=resolve;});globalThis.setTimeout=(fn,ms,...args)=>{const timer=originalTimer(fn,ms,...args);if(ms===90000||ms===20000){timers.push({fn,ms});armed();}return timer;};
+  globalThis.fetch=async(url,options)=>new Promise((resolve,reject)=>{if(options.signal.aborted)reject(new DOMException('abort','AbortError'));else options.signal.addEventListener('abort',()=>reject(new DOMException('abort','AbortError')),{once:true});});
+  const pending=worker.fetch(request('/api/image/generate','POST',input,cookie),env);await ready;assert.equal(timers.at(-1).ms,90000);timers.at(-1).fn();const timed=await pending;assert.equal((await timed.json()).creation_state,'unknown');
+ }finally{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimer;}
+});
