@@ -52,6 +52,33 @@ try:
   # Full workspace backup includes original Markdown and its reference.
   backup=page.evaluate("""async()=>{const {collectLegacyBackup}=await import('/m05/legacy-backup.mjs');const data=await collectLegacyBackup();const style=current().effectStyle;return {contains:data.files.some(f=>f.id===style.fileId),ref:data.workspace.projects.find(p=>p.id===current().id).effectStyle.fileId===style.fileId};}""");assert backup=={'contains':True,'ref':True}
   page.locator('[data-image-action="remove-style"]').click();assert page.evaluate('current().effectStyle===null');assert page.evaluate('current().effectImages.length')==2;assert page.evaluate('current().effectImages.at(-1).style.name')=='我的风格.md'
+  # Deletion is confirmed, scoped, durable, and atomic on storage failure.
+  before=page.evaluate('JSON.stringify(current())')
+  page.once('dialog',lambda dialog:dialog.dismiss())
+  page.locator('[data-image-action="delete-image"]').first.click()
+  assert page.evaluate('JSON.stringify(current())')==before
+  page.evaluate("()=>{window.originalSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('test quota','QuotaExceededError');};}")
+  page.once('dialog',lambda dialog:dialog.accept())
+  page.locator('[data-image-action="delete-image"]').first.click()
+  assert page.evaluate('JSON.stringify(current())')==before
+  assert page.locator('.generated-images figure').count()==2
+  page.evaluate('()=>{Storage.prototype.setItem=window.originalSetItem;}')
+  page.once('dialog',lambda dialog:dialog.accept())
+  page.locator('[data-image-action="delete-image"]').first.click()
+  assert page.evaluate('current().effectImages.map(i=>i.task_id)')==['old-image']
+  assert page.evaluate('JSON.stringify(current().plan)')==seed['plan']
+  assert page.evaluate('JSON.stringify(current().versions)')==seed['versions']
+  assert len(calls)==1
+  page.reload();page.locator('[data-view="effects"]').click()
+  assert page.locator('.generated-images figure').count()==1
+  page.once('dialog',lambda dialog:dialog.accept())
+  page.locator('[data-image-action="delete-image"]').click()
+  assert page.locator('.effect-preview-empty').count()==1
+  page.locator('#effect-project').select_option(seed['second'])
+  assert page.evaluate('current().effectImages||[]')==[]
+  page.locator('#effect-project').select_option(seed['id'])
+  page.reload();page.locator('[data-view="effects"]').click()
+  assert page.evaluate('current().effectImages')==[]
   page.set_viewport_size({'width':390,'height':844});page.screenshot(path=str(out/'mobile.png'),full_page=True,animations='disabled');assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
   assert not errors,errors
   print(json.dumps({'separate_navigation':True,'markdown_saved_and_restored':True,'markdown_is_text_only':True,'invalid_files_preserve_previous':True,'style_in_generation_prompt':True,'one_task_only':True,'project_scoped':True,'original_plan_and_history_preserved':True,'backup_includes_original_markdown':True,'mobile_no_overflow':True,'real_paid_calls':False,'screenshots':str(out)}));browser.close()
