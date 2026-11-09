@@ -31,22 +31,44 @@ try:
   assert page.locator('[data-bold-ground]').first.get_attribute('stroke-width')=='3'
   assert page.locator('[data-entourage="pedestrian"]').first.get_attribute('fill')=='#dc3548'
   assert page.locator('[data-entourage="car"]').first.get_attribute('fill')=='#07506c'
-  assert page.locator('#section-editor-canvas image').count()==0
-  assert page.locator('[data-line-plant]').count()==count+1
+  assert page.locator('#section-editor-canvas [data-section-object] image').count()==count+1
+  assert page.locator('[data-plant-color="#9ab9ae"]').count()==count+1
   assert page.evaluate('JSON.stringify(current().sectionScene.objects)')==positions
+  assert page.locator('#section-editor-canvas [data-section-object] svg').last.get_attribute('viewBox')=='45 100 320 320'
+  geometry=page.evaluate('JSON.stringify(current().sectionScene.objects.map(({plantColor,...o})=>o))')
+  page.locator('#section-plant-color').fill('#cc6688')
+  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
+  assert page.evaluate('JSON.stringify(current().sectionScene.objects.map(({plantColor,...o})=>o))')==geometry
+  assert page.locator('[data-plant-color="#cc6688"]').count()==1
+  page.locator('[data-se="undo"]').click()
+  assert page.evaluate('!current().sectionScene.objects.at(-1).plantColor')
+  page.locator('[data-se="redo"]').click()
+  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
+  page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
+  page.locator('[data-se="reset-color"]').click()
+  assert page.evaluate('!current().sectionScene.objects.at(-1).plantColor')
+
   page.locator('#section-editor-canvas').screenshot(path='/tmp/line-section-preview.png')
   with page.expect_download() as line_info:page.locator('[data-se="export"]').click()
-  line_svg=Path(line_info.value.path()).read_text();assert '<image' not in line_svg and '彩色剪影' in line_svg
+  line_svg=Path(line_info.value.path()).read_text();assert 'data:image/png;base64,' in line_svg and '彩色剪影' in line_svg
+  page.locator('#section-style').select_option('collage')
+  page.locator('#section-style').select_option('line')
   page.locator('[data-se="undo"]').click()
   assert page.locator('#section-style').input_value()=='collage'
   page.locator('[data-se="redo"]').click()
   assert page.locator('#section-style').input_value()=='line'
+  page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
+  page.locator('#section-plant-color').fill('#cc6688')
+  with page.expect_download() as tint_info:page.locator('[data-se="export"]').click()
+  tint_svg=Path(tint_info.value.path()).read_text();assert 'section-tint-cc6688' in tint_svg
   page.reload();page.locator('[data-se="open"]').click()
+  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
   assert page.locator('#section-style').input_value()=='line'
   page.locator('#section-style').select_option('collage')
   page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
   page.locator('[data-se="duplicate"]').click()
   assert page.locator('#section-editor-canvas [data-section-object]').count()==count+2
+  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
   page.locator('[data-se="delete"]').click()
   assert page.locator('#section-editor-canvas [data-section-object]').count()==count+1
   page.locator('[data-se="undo"]').click()
