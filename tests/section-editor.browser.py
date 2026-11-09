@@ -36,6 +36,18 @@ try:
   assert page.evaluate('JSON.stringify(current().sectionScene.objects)')==positions
   assert page.locator('#section-editor-canvas [data-section-object] svg').last.get_attribute('viewBox')=='45 100 320 320'
   geometry=page.evaluate('JSON.stringify(current().sectionScene.objects.map(({plantColor,...o})=>o))')
+  before_live_pixels=page.locator('#section-editor-canvas').screenshot()
+  before_live=page.evaluate('JSON.stringify(current().sectionScene)')
+  page.evaluate("()=>{window.liveInput=document.querySelector('#section-plant-color');liveInput.value='#55aa33';liveInput.dispatchEvent(new Event('input',{bubbles:true}));}")
+  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#55aa33'
+  assert page.locator('#section-editor-canvas [data-plant-color="#55aa33"]').count()==1
+  assert page.locator('#section-editor-canvas').screenshot()!=before_live_pixels
+  page.evaluate("()=>{liveInput.value='#bb4422';liveInput.dispatchEvent(new Event('input',{bubbles:true}));}")
+  assert page.evaluate('liveInput===document.querySelector("#section-plant-color") && liveInput.isConnected')
+  assert page.locator('#section-editor-canvas [data-plant-color="#bb4422"]').count()==1
+  page.locator('[data-se="undo"]').click()
+  assert page.evaluate('JSON.stringify(current().sectionScene)')==before_live
+  page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
   page.locator('#section-plant-color').fill('#cc6688')
   assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
   assert page.evaluate('JSON.stringify(current().sectionScene.objects.map(({plantColor,...o})=>o))')==geometry
