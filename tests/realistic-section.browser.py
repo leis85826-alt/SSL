@@ -24,14 +24,16 @@ try:
   assert cross.get_attribute('data-total-width')=='33'
   assert cross.locator('[data-real-band]').count()==6
   assert cross.locator('[data-real-tree]').count()==2
-  assert cross.locator('image').get_attribute('href').startswith('data:image/webp;base64,')
+  assert cross.locator('image[id$="-plants"]').get_attribute('href').startswith('data:image/png;base64,')
+  assert cross.locator('[data-plant-material]').count()>0
+  assert cross.locator('clipPath').count()==0
   assert page.evaluate('JSON.stringify(db)')==before
   cross.screenshot(path=str(out/'realistic-section.png'))
   page.reload();page.wait_for_selector('svg[data-section-style="realistic"]')
   assert page.evaluate('JSON.stringify(db)')==before
   with page.expect_download() as info:page.locator('[data-work-action="section"]').click()
   exported=Path(info.value.path()).read_text()
-  assert 'data:image/webp;base64,' in exported
+  assert 'data:image/png;base64,' in exported
   standalone=browser.new_page(viewport={'width':1200,'height':700})
   standalone.set_content(exported)
   assert standalone.locator('parsererror').count()==0
