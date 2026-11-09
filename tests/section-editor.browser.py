@@ -22,9 +22,9 @@ try:
   before=page.evaluate('JSON.stringify(current().plan)')
   page.locator('[data-se="open"]').click()
   page.wait_for_selector('#section-editor-canvas')
-  count=page.locator('[data-section-object]').count();assert count>=2
+  count=page.locator('#section-editor-canvas [data-section-object]').count();assert count>=2
   page.locator('[data-se="add"]').first.click()
-  assert page.locator('[data-section-object]').count()==count+1
+  assert page.locator('#section-editor-canvas [data-section-object]').count()==count+1
   positions=page.evaluate('JSON.stringify(current().sectionScene.objects)')
   page.locator('#section-style').select_option('line')
   assert page.locator('[data-editor-style="line"]').count()==1
@@ -41,21 +41,21 @@ try:
   page.reload();page.locator('[data-se="open"]').click()
   assert page.locator('#section-style').input_value()=='line'
   page.locator('#section-style').select_option('collage')
-  page.locator('[data-section-object] > rect').last.click()
+  page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
   page.locator('[data-se="duplicate"]').click()
-  assert page.locator('[data-section-object]').count()==count+2
+  assert page.locator('#section-editor-canvas [data-section-object]').count()==count+2
   page.locator('[data-se="delete"]').click()
-  assert page.locator('[data-section-object]').count()==count+1
+  assert page.locator('#section-editor-canvas [data-section-object]').count()==count+1
   page.locator('[data-se="undo"]').click()
-  assert page.locator('[data-section-object]').count()==count+2
+  assert page.locator('#section-editor-canvas [data-section-object]').count()==count+2
   page.locator('[data-se="redo"]').click()
-  assert page.locator('[data-section-object]').count()==count+1
-  obj=page.locator('[data-section-object] > rect').first
+  assert page.locator('#section-editor-canvas [data-section-object]').count()==count+1
+  obj=page.locator('#section-editor-canvas [data-section-object] > rect').first
   obj.scroll_into_view_if_needed();box=obj.bounding_box();page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2)
   old=page.evaluate('current().sectionScene.objects[0].h')
   page.locator('[data-se="larger"]').click()
   assert page.evaluate('current().sectionScene.objects[0].h')>old
-  obj=page.locator('[data-section-object] > rect').first;box=obj.bounding_box()
+  obj=page.locator('#section-editor-canvas [data-section-object] > rect').first;box=obj.bounding_box()
   oldx=page.evaluate('current().sectionScene.objects[0].x')
   page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2);page.mouse.down();page.mouse.move(box['x']+box['width']/2+35,box['y']+box['height']/2,steps=5);page.mouse.up()
   assert page.evaluate('current().sectionScene.objects[0].x')>oldx
@@ -67,7 +67,18 @@ try:
   with page.expect_download() as info:page.locator('[data-se="export"]').click()
   exported=Path(info.value.path()).read_text();assert 'data-section-handle' not in exported and 'data:image/png;base64,' in exported
   page.locator('[data-action="close-modal"]').click()
-  page.reload();page.locator('[data-se="open"]').click();assert page.locator('[data-section-object]').count()==count+1
+  page.locator('[data-section-view="realistic"]').click()
+  before_preview=page.evaluate('JSON.stringify(current().sectionScene.objects)')
+  page.locator('#section-preview-style').select_option('line')
+  assert page.locator('main [data-editor-style="line"]').count()==1
+  assert page.evaluate('JSON.stringify(current().sectionScene.objects)')==before_preview
+  page.reload();assert page.locator('#section-preview-style').input_value()=='line'
+  page.locator('[data-se="open"]').click()
+  assert page.locator('#section-style').input_value()=='line'
+  page.locator('#section-style').select_option('collage')
+  page.locator('[data-action="close-modal"]').click()
+  page.wait_for_function('document.querySelector("#section-preview-style")?.value==="collage"')
+  page.reload();page.locator('[data-se="open"]').click();assert page.locator('#section-editor-canvas [data-section-object]').count()==count+1
   page.locator('[data-action="close-modal"]').click()
   page.locator('nav [data-view="cases"]').click();page.locator('[data-se="materials"]').click()
   assert page.locator('.section-material-grid article').count()==11
@@ -79,16 +90,16 @@ try:
   page.locator('#section-material-upload').set_input_files({'name':'测试植物.png','mimeType':'image/png','buffer':png})
   page.wait_for_function('db.sectionMaterials?.length===1')
   page.locator('[data-se="open"]').click();page.locator('[data-se="add"]').last.click()
-  assert page.locator('[data-section-object]').count()==count+2
+  assert page.locator('#section-editor-canvas [data-section-object]').count()==count+2
   page.locator('[data-action="close-modal"]').click()
   page.once('dialog',lambda d:d.accept());page.locator('[data-se="remove-material"]').click()
   assert page.locator('.section-material-grid article').count()==11
-  page.locator('[data-se="open"]').click();assert page.locator('[data-section-object]').count()==count+2
+  page.locator('[data-se="open"]').click();assert page.locator('#section-editor-canvas [data-section-object]').count()==count+2
   with page.expect_download() as info:page.locator('[data-se="scene-backup"]').click()
   bundle=json.loads(Path(info.value.path()).read_text());assert bundle['assets']
   backup_path=info.value.path()
   page.locator('[data-se="add"]').first.click()
-  assert page.locator('[data-section-object]').count()==count+3
+  assert page.locator('#section-editor-canvas [data-section-object]').count()==count+3
   page.locator('#section-scene-import').set_input_files(backup_path)
   page.wait_for_function('(n)=>current().sectionScene.objects.length===n',arg=count+2)
   page.locator('[data-se="add"]').first.click()
