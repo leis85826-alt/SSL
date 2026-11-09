@@ -28,12 +28,15 @@ try:
   positions=page.evaluate('JSON.stringify(current().sectionScene.objects)')
   page.locator('#section-style').select_option('line')
   assert page.locator('[data-editor-style="line"]').count()==1
+  assert page.locator('[data-bold-ground]').first.get_attribute('stroke-width')=='3'
+  assert page.locator('[data-entourage="pedestrian"]').first.get_attribute('fill')=='#dc3548'
+  assert page.locator('[data-entourage="car"]').first.get_attribute('fill')=='#07506c'
   assert page.locator('#section-editor-canvas image').count()==0
   assert page.locator('[data-line-plant]').count()==count+1
   assert page.evaluate('JSON.stringify(current().sectionScene.objects)')==positions
   page.locator('#section-editor-canvas').screenshot(path='/tmp/line-section-preview.png')
   with page.expect_download() as line_info:page.locator('[data-se="export"]').click()
-  line_svg=Path(line_info.value.path()).read_text();assert '<image' not in line_svg and '纯线稿' in line_svg
+  line_svg=Path(line_info.value.path()).read_text();assert '<image' not in line_svg and '彩色剪影' in line_svg
   page.locator('[data-se="undo"]').click()
   assert page.locator('#section-style').input_value()=='collage'
   page.locator('[data-se="redo"]').click()
@@ -115,6 +118,12 @@ try:
   with page.expect_download() as lib:page.locator('[data-se="library-export"]').click()
   page.locator('#section-material-import').set_input_files(lib.value.path())
   page.wait_for_function('db.sectionMaterials?.length===2')
+  page.evaluate("()=>{current().plan.geometry.segments[0].type='bike';current().sectionScene=null;persist();render();}")
+  page.locator('[data-se="open"]').click()
+  page.locator('#section-style').select_option('line')
+  assert page.locator('[data-entourage="cyclist"]').first.get_attribute('stroke')=='#d6ad25'
+  page.locator('#section-editor-canvas').screenshot(path='/tmp/colored-section-preview.png')
+  page.locator('[data-action="close-modal"]').click()
   assert not errors,errors
   print('PASS: library upload, catalogue deletion preserves scene, add/duplicate/delete/undo/redo, move/resize/snap, plan untouched, persistence and embedded export.')
   browser.close()
