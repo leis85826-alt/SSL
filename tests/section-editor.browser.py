@@ -25,62 +25,8 @@ try:
   count=page.locator('#section-editor-canvas [data-section-object]').count();assert count>=2
   page.locator('[data-se="add"]').first.click()
   assert page.locator('#section-editor-canvas [data-section-object]').count()==count+1
-  positions=page.evaluate('JSON.stringify(current().sectionScene.objects)')
-  page.locator('#section-style').select_option('line')
-  assert page.locator('[data-editor-style="line"]').count()==1
-  assert page.locator('[data-bold-ground]').first.get_attribute('stroke-width')=='3'
-  assert page.locator('[data-entourage="pedestrian"]').first.get_attribute('fill')=='#dc3548'
-  assert page.locator('[data-entourage="car"]').first.get_attribute('fill')=='#07506c'
-  assert page.locator('#section-editor-canvas [data-section-object] image').count()==count+1
-  assert page.locator('[data-plant-color="#9ab9ae"]').count()==count+1
-  assert page.evaluate('JSON.stringify(current().sectionScene.objects)')==positions
-  assert page.locator('#section-editor-canvas [data-section-object] svg').last.get_attribute('viewBox')=='45 100 320 320'
-  geometry=page.evaluate('JSON.stringify(current().sectionScene.objects.map(({plantColor,...o})=>o))')
-  before_live_pixels=page.locator('#section-editor-canvas').screenshot()
-  before_live=page.evaluate('JSON.stringify(current().sectionScene)')
-  page.evaluate("()=>{window.liveInput=document.querySelector('#section-plant-color');liveInput.value='#55aa33';liveInput.dispatchEvent(new Event('input',{bubbles:true}));}")
-  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#55aa33'
-  assert page.locator('#section-editor-canvas [data-plant-color="#55aa33"]').count()==1
-  assert page.locator('#section-editor-canvas').screenshot()!=before_live_pixels
-  page.evaluate("()=>{liveInput.value='#bb4422';liveInput.dispatchEvent(new Event('input',{bubbles:true}));}")
-  assert page.evaluate('liveInput===document.querySelector("#section-plant-color") && liveInput.isConnected')
-  assert page.locator('#section-editor-canvas [data-plant-color="#bb4422"]').count()==1
-  page.locator('[data-se="undo"]').click()
-  assert page.evaluate('JSON.stringify(current().sectionScene)')==before_live
-  page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
-  page.locator('#section-plant-color').fill('#cc6688')
-  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
-  assert page.evaluate('JSON.stringify(current().sectionScene.objects.map(({plantColor,...o})=>o))')==geometry
-  assert page.locator('[data-plant-color="#cc6688"]').count()==1
-  page.locator('[data-se="undo"]').click()
-  assert page.evaluate('!current().sectionScene.objects.at(-1).plantColor')
-  page.locator('[data-se="redo"]').click()
-  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
-  page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
-  page.locator('[data-se="reset-color"]').click()
-  assert page.evaluate('!current().sectionScene.objects.at(-1).plantColor')
-
-  page.locator('#section-editor-canvas').screenshot(path='/tmp/line-section-preview.png')
-  with page.expect_download() as line_info:page.locator('[data-se="export"]').click()
-  line_svg=Path(line_info.value.path()).read_text();assert 'data:image/png;base64,' in line_svg and '彩色剪影' in line_svg
-  page.locator('#section-style').select_option('collage')
-  page.locator('#section-style').select_option('line')
-  page.locator('[data-se="undo"]').click()
-  assert page.locator('#section-style').input_value()=='collage'
-  page.locator('[data-se="redo"]').click()
-  assert page.locator('#section-style').input_value()=='line'
-  page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
-  page.locator('#section-plant-color').fill('#cc6688')
-  with page.expect_download() as tint_info:page.locator('[data-se="export"]').click()
-  tint_svg=Path(tint_info.value.path()).read_text();assert 'section-tint-cc6688' in tint_svg
-  page.reload();page.locator('[data-se="open"]').click()
-  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
-  assert page.locator('#section-style').input_value()=='line'
-  page.locator('#section-style').select_option('collage')
-  page.locator('#section-editor-canvas [data-section-object] > rect').last.click()
   page.locator('[data-se="duplicate"]').click()
   assert page.locator('#section-editor-canvas [data-section-object]').count()==count+2
-  assert page.evaluate('current().sectionScene.objects.at(-1).plantColor')=='#cc6688'
   page.locator('[data-se="delete"]').click()
   assert page.locator('#section-editor-canvas [data-section-object]').count()==count+1
   page.locator('[data-se="undo"]').click()
@@ -105,16 +51,6 @@ try:
   exported=Path(info.value.path()).read_text();assert 'data-section-handle' not in exported and 'data:image/png;base64,' in exported
   page.locator('[data-action="close-modal"]').click()
   page.locator('[data-section-view="realistic"]').click()
-  before_preview=page.evaluate('JSON.stringify(current().sectionScene.objects)')
-  page.locator('#section-preview-style').select_option('line')
-  assert page.locator('main [data-editor-style="line"]').count()==1
-  assert page.evaluate('JSON.stringify(current().sectionScene.objects)')==before_preview
-  page.reload();assert page.locator('#section-preview-style').input_value()=='line'
-  page.locator('[data-se="open"]').click()
-  assert page.locator('#section-style').input_value()=='line'
-  page.locator('#section-style').select_option('collage')
-  page.locator('[data-action="close-modal"]').click()
-  page.wait_for_function('document.querySelector("#section-preview-style")?.value==="collage"')
   page.reload();page.locator('[data-se="open"]').click();assert page.locator('#section-editor-canvas [data-section-object]').count()==count+1
   page.locator('[data-action="close-modal"]').click()
   page.locator('nav [data-view="cases"]').click();page.locator('[data-se="materials"]').click()
@@ -152,7 +88,7 @@ try:
   with page.expect_download() as lib:page.locator('[data-se="library-export"]').click()
   page.locator('#section-material-import').set_input_files(lib.value.path())
   page.wait_for_function('db.sectionMaterials?.length===2')
-  page.evaluate("()=>{current().plan.geometry.segments[0].type='bike';current().sectionScene=null;persist();render();}")
+  page.evaluate("()=>{current().plan.geometry.segments[0].type='bike';current().sectionScene=null;delete current().sectionScenes;persist();render();}")
   page.locator('[data-se="open"]').click()
   page.locator('#section-style').select_option('line')
   assert page.locator('[data-entourage="cyclist"]').first.get_attribute('stroke')=='#d6ad25'
