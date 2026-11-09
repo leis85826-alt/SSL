@@ -20,7 +20,7 @@ try:
   origin=f'http://127.0.0.1:{server.server_port}';page.goto(origin)
   page.locator('nav [data-view="quantities"]').click()
   assert page.locator('h1').inner_text()=='工程量估算'
-  assert page.get_by_role('button',name='智能查找匹配 · 待接入').is_disabled()
+  assert page.locator('[data-qa="match"]').count()==1
   csv='部位,项目名称,规格,单位,标准段数量\n人行道,香樟,胸径15cm,株,20\n侧分带,地被,密度待填,㎡,150\n'
   page.locator('#quantity-csv-import').set_input_files({'name':'清单.csv','mimeType':'text/csv','buffer':csv.encode()})
   page.wait_for_function('current().quantityEstimate?.rows.length===2')
