@@ -25,6 +25,23 @@ try:
   count=page.locator('[data-section-object]').count();assert count>=2
   page.locator('[data-se="add"]').first.click()
   assert page.locator('[data-section-object]').count()==count+1
+  positions=page.evaluate('JSON.stringify(current().sectionScene.objects)')
+  page.locator('#section-style').select_option('line')
+  assert page.locator('[data-editor-style="line"]').count()==1
+  assert page.locator('#section-editor-canvas image').count()==0
+  assert page.locator('[data-line-plant]').count()==count+1
+  assert page.evaluate('JSON.stringify(current().sectionScene.objects)')==positions
+  page.locator('#section-editor-canvas').screenshot(path='/tmp/line-section-preview.png')
+  with page.expect_download() as line_info:page.locator('[data-se="export"]').click()
+  line_svg=Path(line_info.value.path()).read_text();assert '<image' not in line_svg and '纯线稿' in line_svg
+  page.locator('[data-se="undo"]').click()
+  assert page.locator('#section-style').input_value()=='collage'
+  page.locator('[data-se="redo"]').click()
+  assert page.locator('#section-style').input_value()=='line'
+  page.reload();page.locator('[data-se="open"]').click()
+  assert page.locator('#section-style').input_value()=='line'
+  page.locator('#section-style').select_option('collage')
+  page.locator('[data-section-object] > rect').last.click()
   page.locator('[data-se="duplicate"]').click()
   assert page.locator('[data-section-object]').count()==count+2
   page.locator('[data-se="delete"]').click()
