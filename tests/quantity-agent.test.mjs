@@ -39,3 +39,9 @@ test('one unresolved price does not discard valid prices in the same model respo
  const old=global.fetch;let calls=0;global.fetch=async()=>{calls++;return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(a)}}]}),{headers:{'Content-Type':'application/json'}});};
  try{const out=await events(await worker.fetch(req('/api/model/quantity','POST',p,cookie),env));assert.equal(out.some(e=>e.type==='error'),false);const matches=out.find(e=>e.type==='result').data.matches;assert.equal(matches[0].price,350);assert.equal(matches[1].price,null);assert.equal(matches[1].evidence.fileName,'宁波信息价.pdf');assert.equal(calls,1);}finally{global.fetch=old;}
 });
+
+test('street-tree rows keep their count and category even if the model omits or mislabels the category',()=>{
+ const text='行道树 香樟 株 40',p={mode:'extract',documents:[{id:'tree',fileName:'标准段.csv',location:'第2行',text}]};
+ const result=validateQuantityResult({rows:[{part:'行道树带',name:'香樟',spec:'',category:'灌木',unit:'株',quantity:40,evidence:{source_id:'tree',quote:text}}],warnings:['右侧树列数量尚未确认，请核对。']},p);
+ assert.equal(result.rows[0].category,'乔木');assert.equal(result.rows[0].unit,'株');assert.equal(result.rows[0].quantity,40);assert.equal(result.warnings[0],'右侧树列数量尚未确认，请核对。');
+});
