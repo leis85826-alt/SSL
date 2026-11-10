@@ -32,3 +32,8 @@ test('drawing errors expose bounded final output, redact secrets and never retry
  global.fetch=async()=>{calls++;return new Response(JSON.stringify({choices:[{message:{content:'<think>private reasoning</think>无法读取图片 '+key+' data:image/png;base64,AAAA'}}]}),{headers:{'Content-Type':'application/json'}});};
  try{const result=await events(await worker.fetch(req('/api/quantity/drawing',{images:[image]},c),env));const error=result.find(e=>e.type==='error');assert.match(error.message,/没有返回可识别/);assert.match(error.rawOutput,/无法读取图片/);assert.ok(!error.rawOutput.includes(key));assert.ok(!error.rawOutput.includes('private reasoning'));assert.ok(!error.rawOutput.includes('base64'));assert.ok(error.rawOutput.length<=6000);assert.equal(result.some(e=>e.type==='result'),false);assert.equal(calls,1);}finally{global.fetch=old;}
 });
+
+test('verified tree symbol counts use stocks even if the model labels the count as an area',()=>{
+ const r=drawing();Object.assign(r.rows[0],{part:'行道树带',name:'香樟',category:'其他',unit:'㎡',quantity:2});r.rows[0].evidence={image_id:image.id,method:'symbol_count',quote:'香樟',bbox:[0,0,1,1],count_boxes:[[.1,.1,.1,.1],[.3,.1,.1,.1]]};
+ const tree=validateDrawingResult(r,drawingInput({images:[image]})).rows[0];assert.equal(tree.unit,'株');assert.equal(tree.category,'乔木');assert.equal(tree.quantity,2);
+});

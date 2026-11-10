@@ -35,12 +35,12 @@ try:
   assert page.evaluate('RoadscapeQuantity.calculate(current().quantityEstimate)[1].quantity')==1800
   assert page.evaluate('RoadscapeQuantity.calculate(current().quantityEstimate)[0].amount') is None
   page.locator('[data-q-cell="price"]').first.fill('350');page.locator('[data-q-cell="price"]').first.press('Tab')
-  page.locator('[data-q-cell="priceSource"]').first.fill('杭州信息价，第10页，手工核对');page.locator('[data-q-cell="priceSource"]').first.press('Tab')
+  page.evaluate("()=>{const p=current(),q=RoadscapeQuantity.getData(p);q.rows[0].priceSource='杭州信息价，第10页，手工核对';RoadscapeQuantity.commit(p,q);render();}")
   page.locator('[data-q="calculate"]').click()
   assert page.evaluate('RoadscapeQuantity.calculate(current().quantityEstimate)[0].amount')==84000
-  page.locator('[data-q-cell="repeat"]').first.select_option('false')
+  page.evaluate("()=>{const p=current(),q=RoadscapeQuantity.getData(p);q.rows[0].repeat=false;RoadscapeQuantity.commit(p,q);render();}")
   assert page.evaluate('RoadscapeQuantity.calculate(current().quantityEstimate)[0].quantity')==20
-  page.locator('[data-q-cell="repeat"]').first.select_option('true')
+  page.evaluate("()=>{const p=current(),q=RoadscapeQuantity.getData(p);q.rows[0].repeat=true;RoadscapeQuantity.commit(p,q);render();}")
   page.locator('#quantity-price-upload').set_input_files({'name':'杭州信息价.pdf','mimeType':'application/pdf','buffer':b'%PDF-test'})
   page.wait_for_function('()=>current().quantityEstimate.files.length===1')
   page.locator('[data-q-field="region"]').fill('杭州');page.locator('[data-q-field="region"]').press('Tab')

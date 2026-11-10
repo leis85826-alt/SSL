@@ -40,3 +40,6 @@
 #quantity-model-form{display:grid;gap:16px;margin-top:18px}#quantity-model-form>label{display:block;font-size:12px}#quantity-model-form .input{display:block;width:100%;margin-top:6px;padding:10px;border:1px solid var(--line)}
 
 .quantity-model-entry{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:18px 22px;margin-bottom:18px;border:1px solid var(--line);background:#f0f4ed}.quantity-model-entry .helper{margin-top:5px}@media(max-width:760px){.quantity-model-entry{align-items:flex-start;flex-direction:column;padding:16px}}
+
+/* Four editable quantity fields; evidence stays readable without widening the form. */
+.quantity-edit-table{min-width:620px}.quantity-edit-table th:first-child{width:40%}.quantity-edit-table input{width:100%;min-width:0}.quantity-edit-table select{width:100%;min-width:74px}.quantity-edit-table input[type=number]{width:100%;min-width:90px}.quantity-edit-table td{vertical-align:top}.quantity-edit-table details{max-width:440px}.quantity-edit-table details p{overflow-wrap:anywhere}.quantity-edit-table td>small{display:block;margin-top:5px}

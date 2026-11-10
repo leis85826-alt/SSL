@@ -99,7 +99,7 @@ try:
   assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert '保存失败' in page.locator('#quantity-adoption-message').inner_text()
   page.evaluate('()=>{Storage.prototype.setItem=window.realQuantitySet;}')
-  page.locator('[data-q-cell="spec"]').fill('胸径18cm');page.locator('[data-q-cell="spec"]').press('Tab')
+  page.locator('[data-q-cell="name"]').fill('香樟（胸径18cm）');page.locator('[data-q-cell="name"]').press('Tab')
   page.locator('[data-qa="apply-price"]').click();assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert '已变化' in page.locator('#quantity-adoption-message').inner_text()
   page.screenshot(path='/tmp/quantity-agent-ui.png',full_page=True)

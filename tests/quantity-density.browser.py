@@ -19,37 +19,31 @@ try:
   browser=p.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox']);page=browser.new_page(viewport={'width':1600,'height':1100});errors=[];calls=[]
   page.on('pageerror',lambda e:errors.append(str(e)));page.on('request',lambda r:calls.append(r.url) if r.method=='POST' and '/api/' in r.url else None)
   page.set_default_timeout(6000);page.goto(f'http://127.0.0.1:{server.server_port}');page.locator('nav [data-view="quantities"]').click()
-  page.evaluate("""()=>{const p=current(),q=RoadscapeQuantity.getData(p);q.standardLength=100;q.totalLength=600;q.rows=[{id:'s',part:'侧分带',category:'灌木',name:'红叶石楠',spec:'H31-40',unit:'㎡',quantity:1000,price:null,priceSource:'',repeat:true,adjustment:0},{id:'t',part:'人行道',category:'乔木',name:'香樟',spec:'胸径15cm',unit:'株',quantity:40,price:null,priceSource:'',repeat:true,adjustment:0}];q.files=[];q.ready=false;q.agent={kind:'match',model:'test-model',inputSignature:JSON.stringify(q),result:{matches:[{row_id:'s',price:1.2,status:'similar',source_unit:'株',reason:'按株原价，面积价由密度换算。',evidence:{source_id:'a',fileName:'信息价.pdf',location:'第1页',quote:'红叶石楠 H31-40 株 1.2'}},{row_id:'t',price:350,status:'exact',source_unit:'株',reason:'按株计价',evidence:{source_id:'b',fileName:'信息价.pdf',location:'第2页',quote:'香樟 胸径15cm 株 350'}}]}};RoadscapeQuantity.commit(p,q);render();}""")
+  page.evaluate("""()=>{const p=current(),q=RoadscapeQuantity.getData(p);q.standardLength=100;q.totalLength=600;q.rows=[{id:'s',part:'侧分带',category:'其他',name:'红叶石楠',spec:'H31-40',unit:'㎡',quantity:1000,price:null,priceSource:'',repeat:true,adjustment:0},{id:'t',part:'人行道',category:'其他',name:'香樟',spec:'胸径15cm',unit:'株',quantity:40,price:null,priceSource:'',repeat:true,adjustment:0}];q.files=[];q.ready=false;q.agent={kind:'match',model:'test-model',inputSignature:JSON.stringify(q),result:{matches:[{row_id:'s',price:1.2,status:'similar',source_unit:'株',reason:'按株原价，面积价由密度换算。',evidence:{source_id:'a',fileName:'信息价.pdf',location:'第1页',quote:'红叶石楠 H31-40 株 1.2'}},{row_id:'t',price:350,status:'exact',source_unit:'株',reason:'按株计价',evidence:{source_id:'b',fileName:'信息价.pdf',location:'第2页',quote:'香樟 胸径15cm 株 350'}}]}};RoadscapeQuantity.commit(p,q);render();}""")
   shrub=page.locator('[data-q-row="s"]');tree=page.locator('[data-q-row="t"]')
-  assert shrub.locator('[data-q-cell="density"]').input_value()=='64';assert tree.locator('[data-q-cell="density"]').is_disabled()
+  assert page.locator('.quantity-edit-table thead th').all_text_contents()==['名称','单位','标准段数量','单价 / 元','']
+  assert page.locator('[data-q-cell="density"],[data-q-cell="category"],[data-q-cell="spec"],[data-q-cell="originalPrice"],[data-q-cell="originalUnit"]').count()==0
+  assert set(shrub.locator('[data-q-cell]').evaluate_all('(nodes)=>nodes.map(n=>n.dataset.qCell)'))=={'name','unit','quantity','price'}
   page.locator('[data-qa="apply-all-prices"]').click()
   assert shrub.locator('[data-q-cell="price"]').input_value()=='76.8';assert tree.locator('[data-q-cell="price"]').input_value()=='350'
-  assert shrub.locator('[data-q-cell="originalPrice"]').input_value()=='1.2'
+  assert '乔木' in tree.inner_text() and tree.locator('[data-q-cell="unit"]').input_value()=='株'
+  assert '64 株/㎡' in shrub.inner_text()
   assert page.evaluate('current().quantityEstimate.ready') is False
-  def change(key,value):
-   field=shrub.locator(f'[data-q-cell="{key}"]')
-   if field.evaluate('(e)=>e.tagName')=='SELECT':field.select_option(value)
-   else:field.fill(value);field.press('Tab')
-  change('density','36');assert shrub.locator('[data-q-cell="price"]').input_value()=='43.2'
-  change('density','0');assert shrub.locator('[data-q-cell="density"]').input_value()=='36';assert '种植密度须大于0' in page.locator('#toast').inner_text()
-  change('originalUnit','㎡');assert shrub.locator('[data-q-cell="price"]').input_value()=='1.2'
-  assert shrub.locator('[data-q-cell="density"]').is_disabled()
-  change('originalPrice','20');assert shrub.locator('[data-q-cell="price"]').input_value()=='20'
-  change('originalUnit','株');assert shrub.locator('[data-q-cell="price"]').input_value()=='720'
-  change('originalPrice','1.2');change('density','36')
-  change('originalUnit','');assert shrub.locator('[data-q-cell="price"]').input_value()==''
-  assert '原单位未提供' in shrub.inner_text()
-  change('originalUnit','株');assert shrub.locator('[data-q-cell="price"]').input_value()=='43.2'
-  change('price','50');assert page.evaluate('RoadscapeQuantity.priceInfo(current().quantityEstimate.rows[0]).price')==50
-  assert shrub.locator('[data-q-cell="originalPrice"]').input_value()=='1.2'
-  change('density','49');assert shrub.locator('[data-q-cell="price"]').input_value()=='58.8';change('density','36')
-  change('category','乔木');assert shrub.locator('[data-q-cell="density"]').is_disabled();assert shrub.locator('[data-q-cell="price"]').input_value()==''
-  change('category','灌木');assert shrub.locator('[data-q-cell="price"]').input_value()=='43.2'
+  assert page.evaluate('current().quantityEstimate.rows[1].quantity')==40
+  # A saved old density does not turn the new fixed rule into a hidden setting.
+  page.evaluate("()=>{const p=current(),q=RoadscapeQuantity.getData(p);q.rows[0].density=36;q.rows[0].price=43.2;q.ready=true;RoadscapeQuantity.commit(p,q);render();}")
+  assert shrub.locator('[data-q-cell="price"]').input_value()=='76.8'
+  assert page.locator('[data-q="export-excel"]').is_disabled()
+  shrub.locator('[data-q-cell="price"]').fill('50');shrub.locator('[data-q-cell="price"]').press('Tab')
+  assert page.evaluate('RoadscapeQuantity.priceInfo(current().quantityEstimate.rows[0]).price')==50
+  assert page.evaluate('current().quantityEstimate.rows[0].priceInput.price')==1.2
+  page.evaluate("()=>{const p=current(),q=RoadscapeQuantity.getData(p);RoadscapeQuantity.setCandidatePrice(q.rows[0],q.agent.result.matches[0]);RoadscapeQuantity.commit(p,q);render();}")
   page.reload();page.locator('nav [data-view="quantities"]').click()
-  assert shrub.locator('[data-q-cell="density"]').input_value()=='36';assert shrub.locator('[data-q-cell="price"]').input_value()=='43.2'
+  assert shrub.locator('[data-q-cell="price"]').input_value()=='76.8'
+  assert '乔木' in tree.inner_text()
   page.locator('[data-q="calculate"]').click()
-  result=page.evaluate('RoadscapeQuantity.calculate(current().quantityEstimate)');assert result[0]['amount']==259200 and result[1]['amount']==84000
-  assert '343,200' in page.locator('.quantity-card').last.inner_text()
+  result=page.evaluate('RoadscapeQuantity.calculate(current().quantityEstimate)');assert result[0]['amount']==460800 and result[1]['amount']==84000
+  assert '544,800' in page.locator('.quantity-card').last.inner_text()
   with page.expect_download() as info:page.locator('[data-q="export-excel"]').click()
   with zipfile.ZipFile(info.value.path()) as book:
    ns={'s':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
@@ -57,13 +51,18 @@ try:
    cells={}
    for c in ET.fromstring(book.read('xl/worksheets/sheet2.xml')).findall('.//s:sheetData/s:row/s:c',ns):
     value=c.find('s:v',ns);cells[c.attrib['r']]=strings[int(value.text)] if c.attrib.get('t')=='s' else value.text if value is not None else None
-   assert cells['Q2']=='1.2' and cells['R2']=='株' and cells['S2']=='36'
-   assert cells['L2']=='43.2' and cells['M2']=='259200' and '36 株/㎡' in cells['T2']
+   assert cells['Q2']=='1.2' and cells['R2']=='株' and cells['S2']=='64'
+   assert cells['L2']=='76.8' and cells['M2']=='460800' and '64 株/㎡' in cells['T2']
    assert cells['L3']=='350' and cells.get('S3') is None
   with page.expect_download() as info:page.locator('[data-q="export"]').click()
-  text=Path(info.value.path()).read_text(encoding='utf-8-sig');assert '信息价原单位' in text and '36 株/㎡' in text
+  text=Path(info.value.path()).read_text(encoding='utf-8-sig');assert '信息价原单位' in text and '64 株/㎡' in text
+  csv='名称,单位,标准段数量,单价\n银杏,株,5,0\n'
+  page.locator('#quantity-csv-import').set_input_files({'name':'四项清单.csv','mimeType':'text/csv','buffer':csv.encode()})
+  page.wait_for_function('()=>current().quantityEstimate.rows.length===3')
+  assert page.locator('[data-q-row]').last.locator('[data-q-cell="price"]').input_value()=='0'
+  assert '乔木' in page.locator('[data-q-row]').last.inner_text()
   page.set_viewport_size({'width':390,'height':844});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
   assert calls==[] and not errors,(calls,errors)
-  print('PASS: shrub-only 64 default, editable density, tree unchanged, area price not multiplied, raw units and prices, unknown units, zero rejection, manual override, persistence, reviewed calculation, CSV/XLSX audit fields, CSP/mobile. No model calls.')
+  print('PASS: four editable fields, no density/type/spec inputs, fixed 64 despite legacy density, legacy tree classification/count preserved, manual price override, persistence, final calculation and CSV/XLSX audit, CSP/mobile. No model calls.')
   browser.close()
 finally:server.shutdown();server.server_close()
