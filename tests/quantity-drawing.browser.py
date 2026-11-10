@@ -37,7 +37,12 @@ try:
    route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'result','data':result}))
   page.route('**/api/quantity/drawing',drawing)
   page.locator('nav [data-view="quantities"]').click()
-  page.locator('[data-qa="settings"]').click()
+  assert page.locator('.header-actions [data-ai-action="settings"]').is_hidden()
+  assert page.locator('.quantity-model-entry [data-qa="settings"]').count()==1
+  page.locator('nav [data-view="workbench"]').click()
+  assert page.locator('.header-actions [data-ai-action="settings"]').is_visible()
+  page.locator('nav [data-view="quantities"]').click()
+  page.locator('.quantity-model-entry [data-qa="settings"]').click()
   assert page.locator('[name="model"]').input_value()=='deepseek-v4.1-flash'
   page.locator('[name="reuseImageKey"]').check()
   page.locator('[form="quantity-model-form"]').click()
