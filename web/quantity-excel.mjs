@@ -30,7 +30,7 @@ export async function exportWorkbook(project,q,rows){
  detail.columns=headers.map((header,i)=>({header,width:[8,18,14,24,30,10,16,18,16,14,18,18,20,14,42,50,20,16,22,56][i]}));
  const originals=new Map(q.rows.map(r=>[r.id,r]));
  const source=e=>e?[e.fileName,e.location,e.quote].filter(Boolean).join(' · '):'';
- for(let i=0;i<rows.length;i++){const r=rows[i];detail.addRow([i+1,r.part,r.category||'其他',r.name,r.spec,r.unit,originals.get(r.id).quantity,r.repeat?'按长度重复':'一次性',r.factor,r.adjustment||0,r.quantity,r.price,r.amount,r.price===null?'缺价':'已填单价',r.priceSource||source(r.priceEvidence)||(r.price===null?'':'手动单价，来源待补'),source(r.evidence),r.priceInput?.price??null,r.priceInput?.unit||'',r.category==='灌木'&&r.unit==='㎡'&&r.priceInput?.unit==='株'?r.density??64:null,r.priceRule||'手工单价']);}
+ for(let i=0;i<rows.length;i++){const r=rows[i];detail.addRow([i+1,r.part,r.category||'其他',r.name,r.spec,r.unit,originals.get(r.id).quantity,r.repeat?'按长度重复':'一次性',r.factor,r.adjustment||0,r.quantity,r.price,r.amount,r.price===null?'缺价':'已填单价',r.priceSource||source(r.priceEvidence)||(r.price===null?'':'手动单价，来源待补'),source(r.evidence),r.priceInput?.price??null,r.priceInput?.unit||'',r.category==='灌木'&&r.unit==='㎡'&&r.priceInput?.unit==='株'?64:null,r.priceRule||'手工单价']);}
  detail.autoFilter={from:'A1',to:'T'+(rows.length+1)};
  for(const col of ['G','J','K','L','M','Q','S'])detail.getColumn(col).numFmt='#,##0.00';detail.getColumn('I').numFmt='0.########';
  detail.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};detail.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF667660'}};detail.getRow(1).height=28;
