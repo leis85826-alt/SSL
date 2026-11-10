@@ -13,3 +13,21 @@ export async function extractDocuments(files,status=()=>{}){
  }
  if(!documents.length)throw Error('所选资料中没有可识别的文字。');return documents;
 }
+
+export async function renderDrawing(files,pageNumber=1,status=()=>{}){
+ if(files.length!==1||!files[0].name.toLowerCase().endsWith('.pdf'))throw Error('看图统计每次请只勾选一份PDF标准段文件。');
+ const file=files[0],record=await fileStore('get',file.fileId);if(!record)throw Error('找不到图纸原文件。');
+ const pdfjs=await import('/vendor/pdf-4.10.38.min.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/vendor/pdf.worker-4.10.38.min.mjs';const pdf=await pdfjs.getDocument({data:new Uint8Array(await record.file.arrayBuffer()),isEvalSupported:false,useSystemFonts:true}).promise;
+ try{
+  if(!Number.isInteger(pageNumber)||pageNumber<1||pageNumber>pdf.numPages)throw Error('所选页码超出PDF范围。');status('正在渲染图纸第'+pageNumber+'页…');const page=await pdf.getPage(pageNumber),raw=page.getViewport({scale:1}),low=page.getViewport({scale:Math.min(2,1400/Math.max(raw.width,raw.height))}),canvas=document.createElement('canvas');canvas.width=Math.ceil(low.width);canvas.height=Math.ceil(low.height);await page.render({canvasContext:canvas.getContext('2d'),viewport:low,background:'white'}).promise;
+  const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let minX=canvas.width,minY=canvas.height,maxX=0,maxY=0;
+  for(let y=0;y<canvas.height;y+=2)for(let x=0;x<canvas.width;x+=2){const i=(y*canvas.width+x)*4;if(pixels[i+3]>32&&(pixels[i]<235||pixels[i+1]<235||pixels[i+2]<235)){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}}
+  if(minX>=maxX||minY>=maxY)throw Error('该页没有可见图纸内容。');minX=Math.max(0,minX-12);minY=Math.max(0,minY-12);maxX=Math.min(canvas.width,maxX+14);maxY=Math.min(canvas.height,maxY+14);
+  const width=(maxX-minX)/low.scale,height=(maxY-minY)/low.scale,scale=Math.min(6,4096/Math.max(width,height),Math.sqrt(10000000/(width*height))),viewport=page.getViewport({scale}),high=document.createElement('canvas');high.width=Math.ceil(width*scale);high.height=Math.ceil(height*scale);await page.render({canvasContext:high.getContext('2d'),viewport,transform:[1,0,0,1,-minX*scale/low.scale,-minY*scale/low.scale],background:'white'}).promise;
+  const images=[];function image(id,region,sx,sy,w,h,outWidth=w){const c=document.createElement('canvas');c.width=Math.ceil(outWidth);c.height=Math.ceil(h*outWidth/w);c.getContext('2d').drawImage(high,sx,sy,w,h,0,0,c.width,c.height);images.push({id:file.id+'-'+pageNumber+'-'+id,fileName:file.name,page:pageNumber,region,width:c.width,height:c.height,data:c.toDataURL('image/jpeg',.92)});}
+  image('overview','全图概览；图例计数只在此图进行，局部图不要重复计数',0,0,high.width,high.height,Math.min(1800,high.width));
+  let tile=1500,cols=Math.ceil(high.width/tile),rows=Math.ceil(high.height/tile);while(cols*rows>6){tile+=200;cols=Math.ceil(high.width/tile);rows=Math.ceil(high.height/tile);}
+  for(let r=0;r<rows;r++)for(let col=0;col<cols;col++){const x=Math.max(0,col*high.width/cols-80),y=Math.max(0,r*high.height/rows-80),w=Math.min(high.width-x,high.width/cols+160),h=Math.min(high.height-y,high.height/rows+160);image('detail-'+r+'-'+col,'局部 '+(r+1)+'行'+(col+1)+'列（与邻图重叠，仅用于读标注）',x,y,w,h,Math.min(1800,w));}
+  page.cleanup();return images;
+ }finally{await pdf.destroy();}
+}
