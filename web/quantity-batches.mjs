@@ -16,7 +16,7 @@ export function combineResults(mode,results,rows=[]){
  if(mode==='extract')return {rows:results.flatMap(r=>r.rows)};
  const matches=[],seen=new Set();
  for(const result of results)for(const m of result.matches){if(m.status==='missing')continue;
-  const e=m.evidence,key=JSON.stringify([m.row_id,m.price,e?.source_id,e?.quote]);
+  const e=m.evidence,key=JSON.stringify([m.row_id,m.price,m.source_unit,e?.source_id,e?.quote]);
   if(!seen.has(key)){seen.add(key);matches.push(m);}
  }
  for(const row of rows)if(!matches.some(m=>m.row_id===row.id))matches.push({row_id:row.id,status:'missing',price:null,reason:'本次各批资料中未找到可靠单价候选，请人工查阅。'});

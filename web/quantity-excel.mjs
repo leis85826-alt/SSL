@@ -26,13 +26,13 @@ export async function exportWorkbook(project,q,rows){
  for(let i=14;i<=17;i++){summary.getRow(i).height=38;summary.getCell('B'+i).alignment={wrapText:true,vertical:'middle'};}
  for(let i=20;i<=summary.rowCount;i++)summary.getCell('D'+i).numFmt='#,##0.00';
  const detail=book.addWorksheet('工程量明细',{views:[{state:'frozen',ySplit:1,xSplit:3}]});
- const headers=['序号','部位','工程类型','项目名称','规格／做法','单位','标准段数量','计算方式','换算系数','增减量','总工程量','单价 / 元','金额 / 元','价格状态','价格来源／页码','识别依据'];
- detail.columns=headers.map((header,i)=>({header,width:[8,18,14,24,30,10,16,18,16,14,18,18,20,14,42,50][i]}));
+ const headers=['序号','部位','工程类型','项目名称','规格／做法','单位','标准段数量','计算方式','换算系数','增减量','总工程量','单价 / 元','金额 / 元','价格状态','价格来源／页码','识别依据','信息价原单价 / 元','信息价原单位','种植密度 / 株每㎡','单价换算依据'];
+ detail.columns=headers.map((header,i)=>({header,width:[8,18,14,24,30,10,16,18,16,14,18,18,20,14,42,50,20,16,22,56][i]}));
  const originals=new Map(q.rows.map(r=>[r.id,r]));
  const source=e=>e?[e.fileName,e.location,e.quote].filter(Boolean).join(' · '):'';
- for(let i=0;i<rows.length;i++){const r=rows[i];detail.addRow([i+1,r.part,r.category||'其他',r.name,r.spec,r.unit,originals.get(r.id).quantity,r.repeat?'按长度重复':'一次性',r.factor,r.adjustment||0,r.quantity,r.price,r.amount,r.price===null?'缺价':'已填单价',r.priceSource||source(r.priceEvidence)||(r.price===null?'':'手动单价，来源待补'),source(r.evidence)]);}
- detail.autoFilter={from:'A1',to:'P'+(rows.length+1)};
- for(const col of ['G','J','K','L','M'])detail.getColumn(col).numFmt='#,##0.00';detail.getColumn('I').numFmt='0.########';
+ for(let i=0;i<rows.length;i++){const r=rows[i];detail.addRow([i+1,r.part,r.category||'其他',r.name,r.spec,r.unit,originals.get(r.id).quantity,r.repeat?'按长度重复':'一次性',r.factor,r.adjustment||0,r.quantity,r.price,r.amount,r.price===null?'缺价':'已填单价',r.priceSource||source(r.priceEvidence)||(r.price===null?'':'手动单价，来源待补'),source(r.evidence),r.priceInput?.price??null,r.priceInput?.unit||'',r.category==='灌木'&&r.unit==='㎡'&&r.priceInput?.unit==='株'?r.density??64:null,r.priceRule||'手工单价']);}
+ detail.autoFilter={from:'A1',to:'T'+(rows.length+1)};
+ for(const col of ['G','J','K','L','M','Q','S'])detail.getColumn(col).numFmt='#,##0.00';detail.getColumn('I').numFmt='0.########';
  detail.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};detail.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF667660'}};detail.getRow(1).height=28;
  detail.eachRow(row=>{row.alignment={vertical:'middle',wrapText:true};});
  detail.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'1:1'};

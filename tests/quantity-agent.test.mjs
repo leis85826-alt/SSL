@@ -6,7 +6,7 @@ import {quantityInput,validateQuantityResult} from '../dist/cloudflare/model-wor
 const origin='https://quantity-test.example',env={ROADSCAPE_SESSION_SECRET:randomBytes(32).toString('hex')},apiKey=randomBytes(24).toString('hex');
 const req=(path,method='GET',body,cookie='')=>new Request(origin+path,{method,headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
 const payload=()=>({mode:'match',documents:[{id:'source-1',fileName:'杭州信息价.xlsx',location:'苗木 · 第3行',text:'香樟 胸径15cm 单价350元/株'}],rows:[{id:'row-1',name:'香樟',spec:'胸径15cm',unit:'株'}]});
-const answer=()=>({matches:[{row_id:'row-1',status:'exact',price:350,reason:'规格和单位一致，地区和期次需人工核对。',evidence:{source_id:'source-1',quote:'香樟 胸径15cm 单价350元/株'}}]});
+const answer=()=>({matches:[{row_id:'row-1',status:'exact',source_unit:'株',price:350,reason:'规格和单位一致，地区和期次需人工核对。',evidence:{source_id:'source-1',quote:'香樟 胸径15cm 单价350元/株'}}]});
 async function configured(){const first=await worker.fetch(req('/api/model/config'),env),browser=first.headers.getSetCookie().find(c=>c.startsWith('__Host-roadscape-browser=')).split(';')[0];const response=await worker.fetch(req('/api/model/config','POST',{apiKey,model:'saved-quantity-model'},browser),env);assert.equal(response.status,200);return browser+'; '+response.headers.getSetCookie().find(c=>c.startsWith('__Host-roadscape-model=')).split(';')[0];}
 const events=async r=>(await r.text()).trim().split('\n').map(JSON.parse);
 test('requires documents and bounded valid rows before model dispatch',()=>{assert.throws(()=>quantityInput({mode:'extract',documents:[]}));const p=payload();p.rows=[null];assert.throws(()=>quantityInput(p));assert.throws(()=>quantityInput({...payload(),documents:[...payload().documents,...payload().documents]}));});
@@ -16,3 +16,11 @@ test('standard quantities also require quoted source values',()=>{const p={mode:
 test('quantity endpoint reuses saved model/key and returns grounded candidate without applying price',async()=>{const cookie=await configured(),old=global.fetch;let calls=0;global.fetch=async(url,opts)=>{calls++;assert.ok(String(url).endsWith('/chat/completions'));assert.equal(opts.headers.Authorization,'Bearer '+apiKey);const body=JSON.parse(opts.body);assert.equal(body.model,'saved-quantity-model');assert.ok(body.messages[0].content.includes('待分析数据'));return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(answer())}}]}),{headers:{'Content-Type':'application/json'}});};try{const out=await events(await worker.fetch(req('/api/model/quantity','POST',payload(),cookie),env));const result=out.find(e=>e.type==='result').data;assert.equal(result.matches[0].price,350);assert.equal(result.model,'saved-quantity-model');assert.equal(calls,1);}finally{global.fetch=old;}});
 test('fabricated model price returns error and does not retry',async()=>{const cookie=await configured(),old=global.fetch;let calls=0;global.fetch=async()=>{calls++;const a=answer();a.matches[0].price=999;return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(a)}}]}),{headers:{'Content-Type':'application/json'}});};try{const out=await events(await worker.fetch(req('/api/model/quantity','POST',payload(),cookie),env));assert.ok(out.some(e=>e.type==='error'));assert.ok(!out.some(e=>e.type==='result'));assert.equal(calls,1);}finally{global.fetch=old;}});
 test('unauthenticated quantity request cannot dispatch upstream',async()=>{const r=await worker.fetch(req('/api/model/quantity','POST',payload()),env);assert.equal(r.status,401);});
+
+test('price matching preserves original per-plant unit and raw amount for local density conversion',()=>{
+ const p=payload();p.region='杭州';p.period='2026-11';p.rows[0].unit='㎡';p.rows[0].category='灌木';
+ const a=answer();a.matches[0].status='similar';const r=validateQuantityResult(a,p).matches[0];
+ assert.equal(r.price,350);assert.equal(r.source_unit,'株');
+ a.matches[0].source_unit='㎡';assert.equal(validateQuantityResult(a,p).matches[0].source_unit,'');
+ delete a.matches[0].source_unit;assert.equal(validateQuantityResult(a,p).matches[0].status,'similar');
+});
