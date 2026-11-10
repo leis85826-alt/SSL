@@ -58,13 +58,19 @@ try:
   page.wait_for_selector('[data-qa="apply-price"]',timeout=20000)
   assert '第1页' in calls[1]['documents'][0]['location']
   assert page.evaluate('current().quantityEstimate.rows[0].price') is None
+  # Native browser confirmation is unavailable: price adoption must use page controls.
+  page.evaluate("()=>{window.confirm=()=>{throw Error('native confirm unavailable')};}")
   # Existing saved candidates without the new field must also remain usable.
   page.evaluate('()=>{delete current().quantityEstimate.agent.priceInputSignature;}')
   # Changing only quantities/road length must not invalidate a price lookup.
   page.locator('[data-q-field="totalLength"]').fill('600');page.locator('[data-q-field="totalLength"]').press('Tab')
   page.locator('[data-q="calculate"]').click()
-  page.once('dialog',lambda d:d.dismiss());page.locator('[data-qa="apply-price"]').click();assert page.evaluate('current().quantityEstimate.rows[0].price') is None
-  page.once('dialog',lambda d:d.accept());page.locator('[data-qa="apply-price"]').click()
+  page.locator('[data-qa="apply-price"]').click()
+  assert page.locator('[data-qa="confirm-price"]').is_visible()
+  assert page.evaluate('current().quantityEstimate.rows[0].price') is None
+  page.locator('[data-qa="cancel-price"]').click()
+  assert page.evaluate('current().quantityEstimate.rows[0].price') is None
+  page.locator('[data-qa="apply-price"]').click();page.locator('[data-qa="confirm-price"]').click()
   assert page.evaluate('current().quantityEstimate.rows[0].price')==350
   assert page.evaluate('current().quantityEstimate.ready') is True
   assert page.locator('[data-qa="apply-price"]').is_disabled()
@@ -75,13 +81,21 @@ try:
   assert page.locator('[data-qa="apply-price"]').is_disabled()
   assert '42,000' in page.locator('.quantity-card').last.inner_text()
   assert '第1页' in page.evaluate('current().quantityEstimate.rows[0].priceSource')
+  page.evaluate("()=>{window.confirm=()=>{throw Error('native confirm unavailable')};}")
   page.locator('[data-q-cell="price"]').fill('100');page.locator('[data-q-cell="price"]').press('Tab')
-  page.once('dialog',lambda d:d.dismiss());page.locator('[data-qa="apply-price"]').click()
+  page.locator('[data-qa="apply-price"]').click();page.locator('[data-qa="cancel-price"]').click()
   assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert '已取消' in page.locator('#quantity-adoption-message').inner_text()
+  # Changing a target price while inline confirmation is open must not overwrite it.
+  page.locator('[data-qa="apply-price"]').click()
+  page.evaluate("()=>{const p=current(),q=RoadscapeQuantity.getData(p);q.rows[0].price=101;RoadscapeQuantity.commit(p,q);}")
+  page.locator('[data-qa="confirm-price"]').click()
+  assert page.evaluate('current().quantityEstimate.rows[0].price')==101
+  assert '确认期间' in page.locator('#quantity-adoption-message').inner_text()
+  page.locator('[data-q-cell="price"]').fill('100');page.locator('[data-q-cell="price"]').press('Tab')
   # A failed save must not show adoption success or overwrite the saved price.
   page.evaluate("()=>{window.realQuantitySet=Storage.prototype.setItem;Storage.prototype.setItem=()=>{throw Error('quota')};}")
-  page.once('dialog',lambda d:d.accept());page.locator('[data-qa="apply-price"]').click()
+  page.locator('[data-qa="apply-price"]').click();page.locator('[data-qa="confirm-price"]').click()
   assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert '保存失败' in page.locator('#quantity-adoption-message').inner_text()
   page.evaluate('()=>{Storage.prototype.setItem=window.realQuantitySet;}')
@@ -115,6 +129,6 @@ try:
   assert page.evaluate('JSON.stringify(current().quantityEstimate.agent)')==saved
   assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert not errors,errors
-  print('PASS: real Excel and PDF extraction; model receives text and source positions; confirmed-only row and price adoption; length changes keep legacy price candidates valid; adoption recalculates amounts and survives reload; cancel, stale specifications and save failure preserve values. No paid calls.')
+  print('PASS: real Excel and PDF extraction; model receives text and source positions; confirmed-only row and price adoption; page confirmation works with native confirm disabled; length changes keep legacy price candidates valid; adoption recalculates amounts and survives reload; cancel, stale specifications and save failure preserve values. No paid calls.')
   browser.close()
 finally:server.shutdown();server.server_close()
