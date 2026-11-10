@@ -24,3 +24,9 @@ test('conflicting prices from batches stay as separate candidates and false miss
 });
 
 test('empty extraction batch can be combined without inventing quantities',()=>{assert.deepEqual(validateQuantityResult({rows:[]},{mode:'extract',documents:[doc(1,'表头或说明，无明确数量')]}),{rows:[]});assert.deepEqual(combineResults('extract',[{rows:[]},{rows:[{name:'香樟',quantity:20}]}]),{rows:[{name:'香樟',quantity:20}]});});
+
+test('batch aggregation keeps meaningful unresolved reasons and quotes without hiding a later valid price',()=>{
+ const detail={row_id:'r1',status:'missing',price:null,reason:'资料期次不符，未确定价格列。',evidence:{source_id:'pdf-40',quote:'红叶石楠 株 0.84 0.91'}},priced={row_id:'r2',status:'similar',price:20,evidence:{source_id:'p',quote:'20'}};
+ const results=[{matches:[{row_id:'r1',status:'missing',price:null,reason:'本批未找到。'},{row_id:'r2',status:'missing',price:null,reason:'本批未找到。'}]},{matches:[detail,priced]}];
+ const merged=combineResults('match',results,[{id:'r1'},{id:'r2'}]).matches;assert.equal(merged.find(m=>m.row_id==='r1').reason,detail.reason);assert.equal(merged.find(m=>m.row_id==='r1').evidence.quote,detail.evidence.quote);assert.equal(merged.filter(m=>m.row_id==='r2').length,1);assert.equal(merged.find(m=>m.row_id==='r2').price,20);
+});
