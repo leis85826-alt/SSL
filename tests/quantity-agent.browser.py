@@ -58,13 +58,36 @@ try:
   page.wait_for_selector('[data-qa="apply-price"]',timeout=20000)
   assert '第1页' in calls[1]['documents'][0]['location']
   assert page.evaluate('current().quantityEstimate.rows[0].price') is None
+  # Existing saved candidates without the new field must also remain usable.
+  page.evaluate('()=>{delete current().quantityEstimate.agent.priceInputSignature;}')
+  # Changing only quantities/road length must not invalidate a price lookup.
+  page.locator('[data-q-field="totalLength"]').fill('600');page.locator('[data-q-field="totalLength"]').press('Tab')
+  page.locator('[data-q="calculate"]').click()
   page.once('dialog',lambda d:d.dismiss());page.locator('[data-qa="apply-price"]').click();assert page.evaluate('current().quantityEstimate.rows[0].price') is None
   page.once('dialog',lambda d:d.accept());page.locator('[data-qa="apply-price"]').click()
   assert page.evaluate('current().quantityEstimate.rows[0].price')==350
+  assert page.evaluate('current().quantityEstimate.ready') is True
+  assert page.locator('[data-qa="apply-price"]').is_disabled()
+  assert '已采用' in page.locator('#quantity-adoption-message').inner_text()
+  assert '42,000' in page.locator('.quantity-card').last.inner_text()
+  page.reload();page.locator('nav [data-view="quantities"]').click()
+  assert page.evaluate('current().quantityEstimate.rows[0].price')==350
+  assert page.locator('[data-qa="apply-price"]').is_disabled()
+  assert '42,000' in page.locator('.quantity-card').last.inner_text()
   assert '第1页' in page.evaluate('current().quantityEstimate.rows[0].priceSource')
   page.locator('[data-q-cell="price"]').fill('100');page.locator('[data-q-cell="price"]').press('Tab')
+  page.once('dialog',lambda d:d.dismiss());page.locator('[data-qa="apply-price"]').click()
+  assert page.evaluate('current().quantityEstimate.rows[0].price')==100
+  assert '已取消' in page.locator('#quantity-adoption-message').inner_text()
+  # A failed save must not show adoption success or overwrite the saved price.
+  page.evaluate("()=>{window.realQuantitySet=Storage.prototype.setItem;Storage.prototype.setItem=()=>{throw Error('quota')};}")
+  page.once('dialog',lambda d:d.accept());page.locator('[data-qa="apply-price"]').click()
+  assert page.evaluate('current().quantityEstimate.rows[0].price')==100
+  assert '保存失败' in page.locator('#quantity-adoption-message').inner_text()
+  page.evaluate('()=>{Storage.prototype.setItem=window.realQuantitySet;}')
+  page.locator('[data-q-cell="spec"]').fill('胸径18cm');page.locator('[data-q-cell="spec"]').press('Tab')
   page.locator('[data-qa="apply-price"]').click();assert page.evaluate('current().quantityEstimate.rows[0].price')==100
-  assert '已变化' in page.locator('#toast').inner_text()
+  assert '已变化' in page.locator('#quantity-adoption-message').inner_text()
   page.screenshot(path='/tmp/quantity-agent-ui.png',full_page=True)
   assert len(calls)==2
   # Two full information-price CSV files exceed the old 160k/2000 passage limit.
@@ -92,6 +115,6 @@ try:
   assert page.evaluate('JSON.stringify(current().quantityEstimate.agent)')==saved
   assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert not errors,errors
-  print('PASS: real Excel and PDF extraction; model receives text and source positions; confirmed-only row and price adoption; cancel and stale candidates preserve values. No paid calls.')
+  print('PASS: real Excel and PDF extraction; model receives text and source positions; confirmed-only row and price adoption; length changes keep legacy price candidates valid; adoption recalculates amounts and survives reload; cancel, stale specifications and save failure preserve values. No paid calls.')
   browser.close()
 finally:server.shutdown();server.server_close()
