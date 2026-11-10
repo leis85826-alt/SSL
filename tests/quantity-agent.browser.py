@@ -156,6 +156,21 @@ try:
   assert len(failed)==2
   assert page.evaluate('JSON.stringify(current().quantityEstimate.agent)')==saved
   assert page.evaluate('current().quantityEstimate.rows[0].price')==100
+  # An uncertain price is shown as pending, with the model's reason and source.
+  def unresolved_price(route):
+   body=route.request.post_data_json;calls.append(body);source=next(d for d in body['documents'] if 'Price350' in d['text'])
+   result={'model':'saved-quantity-model','matches':[{'row_id':body['rows'][0]['id'],'status':'missing','price':None,'reason':'资料2023-03与项目2026-02期次不同，价格列待人工确认。','evidence':{'source_id':source['id'],'fileName':source['fileName'],'location':source['location'],'quote':source['text']}}]}
+   route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'result','data':result}))
+  page.route('**/api/quantity/analyze',unresolved_price)
+  page.evaluate("()=>{const p=current(),q=RoadscapeQuantity.getData(p);for(const f of q.files)if(f.name.endsWith('.csv'))f.use=false;RoadscapeQuantity.commit(p,q);render();}")
+  page.locator('[data-qa="match"]').click()
+  page.wait_for_function("()=>current().quantityEstimate.agent?.result.matches[0].status==='missing'",timeout=20000)
+  assert '待补价／需人工确认' in page.locator('.quantity-page').inner_text()
+  assert '资料2023-03与项目2026-02期次不同' in page.locator('.quantity-page').inner_text()
+  assert page.evaluate('current().quantityEstimate.agent.result.matches[0].evidence.fileName')=='杭州信息价.pdf'
+  assert page.locator('[data-qa="apply-price"]').count()==0
+  assert page.locator('[data-qa="apply-all-prices"]').is_disabled()
+  assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert not errors,errors
   print('PASS: real Excel and PDF extraction; model receives text and source positions; confirmed-only row and price adoption; page confirmation works with native confirm disabled; length changes keep legacy price candidates valid; adoption recalculates amounts and survives reload; bulk fills editable prices without model calls or calculation, preserves manual prices and supports review before final calculation; cancel, stale specifications and save failure preserve values. No paid calls.')
   browser.close()

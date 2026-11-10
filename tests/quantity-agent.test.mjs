@@ -24,3 +24,18 @@ test('price matching preserves original per-plant unit and raw amount for local 
  a.matches[0].source_unit='㎡';assert.equal(validateQuantityResult(a,p).matches[0].source_unit,'');
  delete a.matches[0].source_unit;assert.equal(validateQuantityResult(a,p).matches[0].status,'similar');
 });
+
+test('null prices remain unresolved with grounded text evidence instead of becoming numeric errors or zero',()=>{
+ const p=payload();p.documents[0].text='香樟 P20以下 株 1.46 1.60';
+ for(const status of ['similar','exact','missing']){
+  const a=answer();Object.assign(a.matches[0],{status,price:null,reason:'规格档和含税/除税列未确定，资料2023-03与项目2026-02不一致。',evidence:{source_id:'source-1',quote:p.documents[0].text}});
+  const m=validateQuantityResult(a,p).matches[0];assert.equal(m.status,'missing');assert.equal(m.price,null);assert.equal(m.evidence.quote,p.documents[0].text);assert.match(m.reason,/2023-03/);
+ }
+ const a=answer();a.matches[0].price=null;a.matches[0].evidence.source_id='unknown';const m=validateQuantityResult(a,p).matches[0];assert.equal(m.evidence,undefined);assert.match(m.reason,/无法与原文件核对/);
+});
+test('one unresolved price does not discard valid prices in the same model response',async()=>{
+ const cookie=await configured(),p=payload();p.rows.push({id:'row-2',name:'红叶石楠',spec:'',unit:'㎡'});p.documents.push({id:'source-2',fileName:'宁波信息价.pdf',location:'第40页',text:'红叶石楠 H31-40 株 0.84 0.91'});
+ const a=answer();a.matches.push({row_id:'row-2',status:'similar',price:null,reason:'两列价格未确定计价口径，请人工核对。',evidence:{source_id:'source-2',quote:p.documents[1].text}});
+ const old=global.fetch;let calls=0;global.fetch=async()=>{calls++;return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(a)}}]}),{headers:{'Content-Type':'application/json'}});};
+ try{const out=await events(await worker.fetch(req('/api/model/quantity','POST',p,cookie),env));assert.equal(out.some(e=>e.type==='error'),false);const matches=out.find(e=>e.type==='result').data.matches;assert.equal(matches[0].price,350);assert.equal(matches[1].price,null);assert.equal(matches[1].evidence.fileName,'宁波信息价.pdf');assert.equal(calls,1);}finally{global.fetch=old;}
+});
