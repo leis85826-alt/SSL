@@ -13,7 +13,7 @@ export function planBatches(documents,common){
  return batches;
 }
 export function combineResults(mode,results,rows=[]){
- if(mode==='extract')return {rows:results.flatMap(r=>r.rows)};
+ if(mode==='extract'){const warnings=[...new Set(results.flatMap(r=>r.warnings||[]))].slice(0,20);return {rows:results.flatMap(r=>r.rows),...(warnings.length?{warnings}:{})};}
  const matches=[],seen=new Set(),unresolved=new Map();
  for(const result of results)for(const m of result.matches){if(m.status==='missing'){if(typeof m.reason==='string'&&m.reason.trim()){const list=unresolved.get(m.row_id)||[];list.push(m);unresolved.set(m.row_id,list);}continue;}
   const e=m.evidence,key=JSON.stringify([m.row_id,m.price,m.source_unit,e?.source_id,e?.quote]);
