@@ -67,6 +67,30 @@ try:
   assert '已变化' in page.locator('#toast').inner_text()
   page.screenshot(path='/tmp/quantity-agent-ui.png',full_page=True)
   assert len(calls)==2
+  # Two full information-price CSV files exceed the old 160k/2000 passage limit.
+  text='名称,规格,单价,说明\n'+''.join('香樟,胸径15cm,Price350,'+'资料说明'*25+'\n' for _ in range(1200))
+  page.locator('#quantity-price-upload').set_input_files([{'name':name,'mimeType':'text/csv','buffer':text.encode()} for name in ['信息价一.csv','信息价二.csv']])
+  page.wait_for_function('()=>current().quantityEstimate.files.length===4')
+  page.locator('[data-qa="match"]').click()
+  page.wait_for_function('()=>current().quantityEstimate.agent?.batchCount>1',timeout=30000)
+  batches=page.evaluate('current().quantityEstimate.agent.batchCount')
+  assert batches>1 and len(calls)==2+batches
+  passages=[d for call in calls[2:] for d in call['documents']]
+  assert len(passages)>2000 and sum(len(d['text']) for d in passages)>160000
+  assert {'信息价一.csv','信息价二.csv'}.issubset({d['fileName'] for d in passages})
+  assert page.evaluate('current().quantityEstimate.rows[0].price')==100
+  saved=page.evaluate('JSON.stringify(current().quantityEstimate.agent)')
+  failed=[]
+  def fail_batch(route):
+   failed.append(route.request.post_data_json)
+   if len(failed)==1:agent(route)
+   else:route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'error','message':'模拟第二批失败'}))
+  page.route('**/api/quantity/analyze',fail_batch)
+  page.locator('[data-qa="match"]').click()
+  page.wait_for_function("()=>document.querySelector('#quantity-agent-status').textContent.includes('模拟第二批失败')",timeout=30000)
+  assert len(failed)==2
+  assert page.evaluate('JSON.stringify(current().quantityEstimate.agent)')==saved
+  assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert not errors,errors
   print('PASS: real Excel and PDF extraction; model receives text and source positions; confirmed-only row and price adoption; cancel and stale candidates preserve values. No paid calls.')
   browser.close()
