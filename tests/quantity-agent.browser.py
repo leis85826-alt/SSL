@@ -22,7 +22,7 @@ try:
   page.set_default_timeout(6000)
   origin=f'http://127.0.0.1:{server.server_port}';page.goto(origin)
   import base64
-  page.route('**/api/model/config',lambda r:r.fulfill(json={'configured':True,'model':'saved-quantity-model'}))
+  page.route('**/api/quantity/config',lambda r:r.fulfill(json={'configured':True,'model':'saved-quantity-model'}))
   calls=[]
   def agent(route):
    d=route.request.post_data_json;calls.append(d)
@@ -31,16 +31,16 @@ try:
    result={'rows':[{'part':'人行道','name':'香樟','spec':'胸径15cm','unit':'株','quantity':20,'evidence':evidence}]} if d['mode']=='extract' else {'matches':[{'row_id':d['rows'][0]['id'],'status':'similar','price':350,'reason':'品种别名候选；地区期次及规格需要人工核实。','evidence':evidence}]}
    result.update({'model':'saved-quantity-model','checkedAt':'2026-11-09T09:00:00Z'})
    route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'result','data':result}))
-  page.route('**/api/model/quantity',agent)
+  page.route('**/api/quantity/analyze',agent)
   page.locator('nav [data-view="quantities"]').click()
   def vision(route):
    payload=route.request.post_data_json
    assert payload['image'].startswith('data:image/png;base64,') and len(payload['expected'])==6
    route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'result','data':{'passed':True,'model':'saved-quantity-model','checkedAt':'2026-11-10T08:00:00Z','message':'测试图片通过，图纸统计尚未接入。'}}))
-  page.route('**/api/model/vision-test',vision)
+  page.route('**/api/quantity/vision-test',vision)
   page.locator('[data-qa="vision"]').click()
   page.wait_for_function('()=>current().quantityEstimate?.visionCheck?.passed===true')
-  assert '图纸图片识别' in page.locator('.quantity-page').inner_text()
+  assert '看图统计PDF' in page.locator('.quantity-page').inner_text()
 
   page.add_script_tag(url=origin+'/vendor/exceljs-4.4.0.min.js')
   book=page.evaluate("async()=>{const b=new ExcelJS.Workbook(),s=b.addWorksheet('标准段');s.addRow(['部位','名称','规格','单位','数量']);s.addRow(['人行道','香樟','胸径15cm','株',20]);const bytes=new Uint8Array(await b.xlsx.writeBuffer());let str='';for(const v of bytes)str+=String.fromCharCode(v);return btoa(str);}")
