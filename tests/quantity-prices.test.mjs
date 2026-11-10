@@ -23,10 +23,10 @@ test('same-price repeated sources are not price conflicts; invalid/unmapped cand
 });
 
 const api=context.window.RoadscapeQuantity;
-test('only shrub area rows convert per-plant prices with editable density, with no double multiplication',()=>{
+test('only shrub area rows convert per-plant prices with fixed 64 density, with no double multiplication',()=>{
  const r={...row('s'),category:'灌木',unit:'㎡'};api.setCandidatePrice(r,candidate('s',1.2));
  assert.equal(r.density,64);assert.equal(r.priceInput.price,1.2);assert.equal(r.priceInput.unit,'株');assert.equal(r.price,76.8);
- r.density=36;api.refreshPrice(r);assert.equal(r.price,43.2);api.refreshPrice(r);assert.equal(r.price,43.2);
+ r.density=36;api.refreshPrice(r);assert.equal(r.price,76.8);api.refreshPrice(r);assert.equal(r.price,76.8);
  r.priceInput={price:20,unit:'㎡'};api.refreshPrice(r);assert.equal(r.price,20);
  const tree={...row('tree'),density:64};api.setCandidatePrice(tree,candidate('tree',350));assert.equal(tree.price,350);
  tree.unit='㎡';api.refreshPrice(tree);assert.equal(tree.price,null);
@@ -38,11 +38,23 @@ test('unknown units do not silently become area prices; legacy quoted units rema
  r.priceInput.unit='株';api.refreshPrice(r);assert.equal(r.price,76.8);
  api.setCandidatePrice(r,{...candidate('s',2),source_unit:undefined,evidence:{quote:'红叶石楠 株 单价2'}});assert.equal(r.price,128);
  assert.equal(api.candidateUnit({evidence:{quote:'每㎡64株'}}),'');
- r.density=0;api.refreshPrice(r);assert.equal(r.price,null);
+ r.density=0;api.refreshPrice(r);assert.equal(r.price,128);
 });
 test('manual override preserves raw source and old manual prices stay untouched',()=>{
  const r={...row('s'),category:'灌木',unit:'㎡'};api.setCandidatePrice(r,candidate('s',1.2));r.price=50;r.priceManual=true;
  assert.equal(api.priceInfo(r).price,50);assert.equal(r.priceInput.price,1.2);
  assert.equal(api.priceInfo({...row('old',10),category:'灌木',unit:'㎡'}).price,10);
- r.density=36;api.refreshPrice(r);assert.equal(r.price,43.2);assert.equal(r.priceManual,false);
+ r.density=36;api.refreshPrice(r);assert.equal(r.price,76.8);assert.equal(r.priceManual,false);
+});
+
+test('missing legacy tree categories are recognized without changing quantities or forcing area to count',()=>{
+ const r={...row('tree'),name:'香樟',category:'其他',quantity:40};assert.equal(api.itemKind(r),'乔木');api.setCandidatePrice(r,candidate('tree',350));assert.equal(r.price,350);assert.equal(r.quantity,40);assert.equal(r.unit,'株');
+ const area={...r,unit:'㎡'};assert.equal(api.itemKind(area),'乔木');assert.equal(api.priceInfo(area).price,null);assert.equal(area.quantity,40);
+ const shrub={...row('s'),name:'红叶石楠',category:'其他',unit:'㎡'};assert.equal(api.itemKind(shrub),'灌木');api.setCandidatePrice(shrub,candidate('s',1.2));assert.equal(shrub.price,76.8);
+});
+
+test('legacy proven tree counts are repaired without changing counts, source data or manual unit choices',()=>{
+ const p={length:600,quantityEstimate:{ready:true,rows:[{id:'t',name:'香樟',category:'其他',unit:'㎡',quantity:2,price:null,evidence:{method:'symbol_count',count_boxes:[[.1,.1,.1,.1],[.3,.1,.1,.1]]}}]}};
+ const q=api.getData(p);assert.equal(q.rows[0].unit,'株');assert.equal(q.rows[0].quantity,2);assert.equal(q.ready,false);assert.equal(p.quantityEstimate.rows[0].unit,'㎡');
+ p.quantityEstimate.rows[0].unitManual=true;assert.equal(api.getData(p).rows[0].unit,'㎡');
 });
