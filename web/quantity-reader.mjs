@@ -1,4 +1,4 @@
-// File decoding is local; only extracted text is sent to the saved model provider.
+// Decoding and Excel exports are local. Vision requests send rendered page images.
 let sheetPromise;
 async function sheets(){if(window.ExcelJS)return window.ExcelJS;if(!sheetPromise)sheetPromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/vendor/exceljs-4.4.0.min.js';script.onload=()=>resolve(window.ExcelJS);script.onerror=()=>{sheetPromise=null;reject(Error('Excel解析组件加载失败，请刷新重试。'));};document.head.append(script);});return sheetPromise;}
 export async function extractDocuments(files,status=()=>{}){
@@ -31,3 +31,5 @@ export async function renderDrawing(files,pageNumber=1,status=()=>{}){
   page.cleanup();return images;
  }finally{await pdf.destroy();}
 }
+
+export {sheets as loadExcelJS};
