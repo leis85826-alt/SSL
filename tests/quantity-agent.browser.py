@@ -33,10 +33,19 @@ try:
    route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'result','data':result}))
   page.route('**/api/model/quantity',agent)
   page.locator('nav [data-view="quantities"]').click()
+  def vision(route):
+   payload=route.request.post_data_json
+   assert payload['image'].startswith('data:image/png;base64,') and len(payload['expected'])==6
+   route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'result','data':{'passed':True,'model':'saved-quantity-model','checkedAt':'2026-11-10T08:00:00Z','message':'测试图片通过，图纸统计尚未接入。'}}))
+  page.route('**/api/model/vision-test',vision)
+  page.locator('[data-qa="vision"]').click()
+  page.wait_for_function('()=>current().quantityEstimate?.visionCheck?.passed===true')
+  assert '图纸图片识别' in page.locator('.quantity-page').inner_text()
+
   page.add_script_tag(url=origin+'/vendor/exceljs-4.4.0.min.js')
   book=page.evaluate("async()=>{const b=new ExcelJS.Workbook(),s=b.addWorksheet('标准段');s.addRow(['部位','名称','规格','单位','数量']);s.addRow(['人行道','香樟','胸径15cm','株',20]);const bytes=new Uint8Array(await b.xlsx.writeBuffer());let str='';for(const v of bytes)str+=String.fromCharCode(v);return btoa(str);}")
   page.locator('#quantity-standard-upload').set_input_files({'name':'本次标准段.xlsx','mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','buffer':base64.b64decode(book)})
-  page.wait_for_function('current().quantityEstimate?.files.length===1')
+  page.wait_for_function('()=>current().quantityEstimate?.files.length===1')
   page.locator('[data-qa="extract"]').click()
   page.wait_for_selector('[data-qa="apply-rows"]',timeout=15000)
   assert '第2行' in calls[0]['documents'][-1]['location']
@@ -44,7 +53,7 @@ try:
   page.once('dialog',lambda d:d.dismiss());page.locator('[data-qa="apply-rows"]').click();assert page.evaluate('current().quantityEstimate.rows.length')==0
   page.once('dialog',lambda d:d.accept());page.locator('[data-qa="apply-rows"]').click();assert page.evaluate('current().quantityEstimate.rows.length')==1
   page.locator('#quantity-price-upload').set_input_files({'name':'杭州信息价.pdf','mimeType':'application/pdf','buffer':(root/'tests/fixtures/quantity-price.pdf').read_bytes()})
-  page.wait_for_function('current().quantityEstimate.files.length===2')
+  page.wait_for_function('()=>current().quantityEstimate.files.length===2')
   page.locator('[data-qa="match"]').click()
   page.wait_for_selector('[data-qa="apply-price"]',timeout=20000)
   assert '第1页' in calls[1]['documents'][0]['location']
