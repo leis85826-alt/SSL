@@ -30,3 +30,5 @@ test('batch aggregation keeps meaningful unresolved reasons and quotes without h
  const results=[{matches:[{row_id:'r1',status:'missing',price:null,reason:'本批未找到。'},{row_id:'r2',status:'missing',price:null,reason:'本批未找到。'}]},{matches:[detail,priced]}];
  const merged=combineResults('match',results,[{id:'r1'},{id:'r2'}]).matches;assert.equal(merged.find(m=>m.row_id==='r1').reason,detail.reason);assert.equal(merged.find(m=>m.row_id==='r1').evidence.quote,detail.evidence.quote);assert.equal(merged.filter(m=>m.row_id==='r2').length,1);assert.equal(merged.find(m=>m.row_id==='r2').price,20);
 });
+
+test('extraction batches retain tree-count warnings instead of silently dropping incomplete areas',()=>{assert.deepEqual(combineResults('extract',[{rows:[],warnings:['行道树数量待核对']},{rows:[{name:'香樟',quantity:40}],warnings:['行道树数量待核对']}]),{rows:[{name:'香樟',quantity:40}],warnings:['行道树数量待核对']});});
