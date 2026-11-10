@@ -14,11 +14,11 @@ export function planBatches(documents,common){
 }
 export function combineResults(mode,results,rows=[]){
  if(mode==='extract')return {rows:results.flatMap(r=>r.rows)};
- const matches=[],seen=new Set();
- for(const result of results)for(const m of result.matches){if(m.status==='missing')continue;
+ const matches=[],seen=new Set(),unresolved=new Map();
+ for(const result of results)for(const m of result.matches){if(m.status==='missing'){if(typeof m.reason==='string'&&m.reason.trim()){const list=unresolved.get(m.row_id)||[];list.push(m);unresolved.set(m.row_id,list);}continue;}
   const e=m.evidence,key=JSON.stringify([m.row_id,m.price,m.source_unit,e?.source_id,e?.quote]);
   if(!seen.has(key)){seen.add(key);matches.push(m);}
  }
- for(const row of rows)if(!matches.some(m=>m.row_id===row.id))matches.push({row_id:row.id,status:'missing',price:null,reason:'本次各批资料中未找到可靠单价候选，请人工查阅。'});
+ for(const row of rows)if(!matches.some(m=>m.row_id===row.id)){const candidates=unresolved.get(row.id)||[],detail=candidates.find(m=>m.evidence)||candidates[0];matches.push(detail?{...detail,status:'missing',price:null}:{row_id:row.id,status:'missing',price:null,reason:'本次各批资料中未找到可靠单价候选，请人工查阅。'});}
  return {matches};
 }
