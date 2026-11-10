@@ -116,6 +116,29 @@ try:
   assert len(passages)>2000 and sum(len(d['text']) for d in passages)>160000
   assert {'信息价一.csv','信息价二.csv'}.issubset({d['fileName'] for d in passages})
   assert page.evaluate('current().quantityEstimate.rows[0].price')==100
+  # One click fills the editable standard list, never calculating until reviewed.
+  page.locator('[data-q-cell="price"]').fill('');page.locator('[data-q-cell="price"]').press('Tab')
+  page.locator('[data-q="calculate"]').click()
+  assert page.evaluate('current().quantityEstimate.ready') is True
+  before_bulk=len(calls)
+  page.locator('[data-qa="apply-all-prices"]').click()
+  page.wait_for_function('()=>current().quantityEstimate.priceFillSummary?.filled===1')
+  assert page.locator('[data-q-cell="price"]').input_value()=='350'
+  assert page.evaluate('current().quantityEstimate.ready') is False
+  assert page.locator('[data-q="export-excel"]').is_disabled()
+  assert '预填 1 项' in page.locator('#quantity-price-review-summary').inner_text()
+  assert page.locator('[data-q-row] details').count()==1
+  assert len(calls)==before_bulk
+  page.reload();page.locator('nav [data-view="quantities"]').click()
+  assert page.locator('[data-q-cell="price"]').input_value()=='350'
+  assert page.evaluate('current().quantityEstimate.ready') is False
+  page.locator('[data-q-cell="price"]').fill('100');page.locator('[data-q-cell="price"]').press('Tab')
+  page.locator('[data-qa="apply-all-prices"]').click()
+  page.wait_for_function('()=>current().quantityEstimate.priceFillSummary?.preserved===1')
+  assert page.locator('[data-q-cell="price"]').input_value()=='100'
+  page.locator('[data-q="calculate"]').click()
+  assert '12,000' in page.locator('.quantity-card').last.inner_text()
+  assert page.evaluate('current().quantityEstimate.ready') is True
   saved=page.evaluate('JSON.stringify(current().quantityEstimate.agent)')
   failed=[]
   def fail_batch(route):
@@ -129,6 +152,6 @@ try:
   assert page.evaluate('JSON.stringify(current().quantityEstimate.agent)')==saved
   assert page.evaluate('current().quantityEstimate.rows[0].price')==100
   assert not errors,errors
-  print('PASS: real Excel and PDF extraction; model receives text and source positions; confirmed-only row and price adoption; page confirmation works with native confirm disabled; length changes keep legacy price candidates valid; adoption recalculates amounts and survives reload; cancel, stale specifications and save failure preserve values. No paid calls.')
+  print('PASS: real Excel and PDF extraction; model receives text and source positions; confirmed-only row and price adoption; page confirmation works with native confirm disabled; length changes keep legacy price candidates valid; adoption recalculates amounts and survives reload; bulk fills editable prices without model calls or calculation, preserves manual prices and supports review before final calculation; cancel, stale specifications and save failure preserve values. No paid calls.')
   browser.close()
 finally:server.shutdown();server.server_close()
