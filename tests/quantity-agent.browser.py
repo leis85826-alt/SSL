@@ -120,6 +120,10 @@ try:
   page.locator('[data-q-cell="price"]').fill('');page.locator('[data-q-cell="price"]').press('Tab')
   page.locator('[data-q="calculate"]').click()
   assert page.evaluate('current().quantityEstimate.ready') is True
+  unavailable_modules=[]
+  def block_price_module(route):
+   unavailable_modules.append(route.request.url);route.abort()
+  page.route('**/quantity-prices.mjs*',block_price_module)
   before_bulk=len(calls)
   page.locator('[data-qa="apply-all-prices"]').click()
   page.wait_for_function('()=>current().quantityEstimate.priceFillSummary?.filled===1')
@@ -129,6 +133,7 @@ try:
   assert '预填 1 项' in page.locator('#quantity-price-review-summary').inner_text()
   assert page.locator('[data-q-row] details').count()==1
   assert len(calls)==before_bulk
+  assert unavailable_modules==[]
   page.reload();page.locator('nav [data-view="quantities"]').click()
   assert page.locator('[data-q-cell="price"]').input_value()=='350'
   assert page.evaluate('current().quantityEstimate.ready') is False

@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fillCandidatePrices} from '../web/quantity-prices.mjs';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const context={window:{},document:{addEventListener(){}},RoadscapePlan:{appearance:{escape:String}}};
+vm.runInNewContext(fs.readFileSync(new URL('../web/quantity-estimate.js',import.meta.url),'utf8'),context);
+const fillCandidatePrices=q=>JSON.parse(JSON.stringify(context.window.RoadscapeQuantity.fillCandidatePrices(q)));
 const row=(id,price=null)=>({id,price,name:'植物'+id,quantity:10});
 const candidate=(row_id,price,status='similar')=>({row_id,price,status,reason:'规格需复核',evidence:{source_id:row_id+'-'+price,fileName:'信息价.pdf',location:'第2页',quote:'单价'+price}});
 test('bulk fills a review draft, preserves entered and zero prices, keeps missing prices blank',()=>{
