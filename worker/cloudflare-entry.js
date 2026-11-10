@@ -73,7 +73,7 @@ export default {
       return browserJSON('请先在 Cloudflare 中配置至少32字符的 ROADSCAPE_SESSION_SECRET 加密密钥。', 503);
     }
     try {
-      const browser = await browserIdentity(request, env, ['/api/model/config', '/api/image/config'].includes(url.pathname) && request.method === 'POST');
+      const browser = await browserIdentity(request, env, ['/api/model/config', '/api/image/config', '/api/quantity/config'].includes(url.pathname) && request.method === 'POST');
       const headers = new Headers(request.headers);
       // A public client must never choose the identity passed to the original Worker.
       headers.set('oai-authenticated-user-id', 'cloudflare-browser:' + browser.id);
