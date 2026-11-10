@@ -28,7 +28,7 @@ try:
    d=route.request.post_data_json;calls.append(d)
    source=next(x for x in d['documents'] if ('香樟' in x['text'] if d['mode']=='extract' else 'Price350' in x['text']))
    evidence={'source_id':source['id'],'fileName':source['fileName'],'location':source['location'],'quote':source['text']}
-   result={'rows':[{'part':'人行道','name':'香樟','spec':'胸径15cm','unit':'株','quantity':20,'evidence':evidence}]} if d['mode']=='extract' else {'matches':[{'row_id':d['rows'][0]['id'],'status':'similar','price':350,'reason':'品种别名候选；地区期次及规格需要人工核实。','evidence':evidence}]}
+   result={'rows':[{'part':'人行道','name':'香樟','spec':'胸径15cm','unit':'株','quantity':20,'evidence':evidence}]} if d['mode']=='extract' else {'matches':[{'row_id':d['rows'][0]['id'],'status':'similar','price':350,'source_unit':'株','reason':'品种别名候选；地区期次及规格需要人工核实。','evidence':evidence}]}
    result.update({'model':'saved-quantity-model','checkedAt':'2026-11-09T09:00:00Z'})
    route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'result','data':result}))
   page.route('**/api/quantity/analyze',agent)
