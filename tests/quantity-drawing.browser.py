@@ -63,6 +63,17 @@ try:
   page.once('dialog',lambda d:d.accept());page.locator('[data-qa="apply-rows"]').click()
   assert page.evaluate('current().quantityEstimate.rows[0].quantity')==1000
   assert page.evaluate('current().quantityEstimate.rows[0].evidence.kind')=='visual'
+  def failed_drawing(route):
+   calls.append(route.request.post_data_json)
+   route.fulfill(content_type='application/x-ndjson',body=json.dumps({'type':'error','message':'模型没有返回可识别的工程量JSON，原清单保留。','rawOutput':'无法读取图纸 <script>unsafe</script>'}))
+  page.route('**/api/quantity/drawing',failed_drawing)
+  page.locator('[data-qa="drawing"]').click()
+  page.get_by_text('查看上次模型返回片段',exact=True).wait_for(timeout=20000)
+  page.get_by_text('查看上次模型返回片段',exact=True).click()
+  assert '无法读取图纸 <script>unsafe</script>' in page.locator('pre').inner_text()
+  assert page.evaluate('current().quantityEstimate.rows.length')==1
+  assert page.evaluate('current().quantityEstimate.rows[0].quantity')==1000
+  assert len(calls)==2
   assert not errors,errors
   print('PASS: separate DeepSeek settings, explicit image key reuse option, actual PDF raster/crop/detail generation, image payload, local evidence previews and confirmed-only quantities. No paid calls.')
   browser.close()
